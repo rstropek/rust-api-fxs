@@ -1,11 +1,11 @@
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::atomic::{AtomicUsize, Ordering},
 };
-
-use serde::{Deserialize, Serialize};
 use tokio::fs;
 
+/// Represents a single todo item
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TodoItem {
     pub title: String,
@@ -14,6 +14,7 @@ pub struct TodoItem {
     pub completed: bool,
 }
 
+/// DTO for patching a todo item
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UpdateTodoItem {
     pub title: Option<String>,
@@ -22,6 +23,7 @@ pub struct UpdateTodoItem {
     pub completed: Option<bool>,
 }
 
+/// Represents a todo item with an id
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct IdentifyableTodoItem {
     pub id: usize,
@@ -36,6 +38,9 @@ impl IdentifyableTodoItem {
     }
 }
 
+/// Parameters for pagination
+///
+/// Used to demonstrate handling of query parameters.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Pagination {
     pub offset: Option<usize>,
@@ -47,6 +52,7 @@ impl Pagination {
     }
 }
 
+/// Error type for the todo items store
 #[derive(thiserror::Error, Debug)]
 pub enum TodoStoreError {
     #[error("persistent data store error")]
@@ -55,12 +61,16 @@ pub enum TodoStoreError {
     SerializationError(#[from] serde_json::error::Error),
 }
 
+/// Todo items store
 #[derive(Default)]
 pub struct TodoStore {
     store: HashMap<usize, IdentifyableTodoItem>,
     id_generator: AtomicUsize,
 }
 impl TodoStore {
+    /// Get list of todo items
+    ///
+    /// Supports pagination.
     pub fn get_todos(&self, pagination: Pagination) -> Vec<IdentifyableTodoItem> {
         self.store
             .values()
@@ -70,10 +80,12 @@ impl TodoStore {
             .collect::<Vec<_>>()
     }
 
+    /// Get a single todo item by id
     pub fn get_todo(&self, id: usize) -> Option<&IdentifyableTodoItem> {
         self.store.get(&id)
     }
 
+    /// Create a new todo item
     pub fn add_todo(&mut self, todo: TodoItem) -> IdentifyableTodoItem {
         let id = self.id_generator.fetch_add(1, Ordering::Relaxed);
         let new_item = IdentifyableTodoItem::new(id, todo);
@@ -81,10 +93,12 @@ impl TodoStore {
         new_item
     }
 
+    /// Remove a todo item by id
     pub fn remove_todo(&mut self, id: usize) -> Option<IdentifyableTodoItem> {
         self.store.remove(&id)
     }
 
+    /// Patch a todo item by id
     pub fn update_todo(&mut self, id: &usize, todo: UpdateTodoItem) -> Option<&IdentifyableTodoItem> {
         if let Some(item) = self.store.get_mut(id) {
             if let Some(title) = todo.title {
@@ -106,6 +120,9 @@ impl TodoStore {
         }
     }
 
+    /// Store todo items to disk
+    ///
+    /// Used to demonstrate error handling.
     pub async fn persist(&self) -> Result<(), TodoStoreError> {
         const FILENAME: &str = "todo_store.json";
 
