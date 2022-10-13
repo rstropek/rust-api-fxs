@@ -1,0 +1,37 @@
+GET http://localhost:3000/todos
+
+###
+GET http://localhost:3000/todos?offset=1&limit=2
+
+###
+# @name newTodo
+POST http://localhost:3000/todos
+Content-Type: application/json
+
+{
+    "title": "Learn Rust",
+    "notes": "Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.",
+    "assigned_to": "Rainer",
+    "completed": false
+}
+
+
+###
+@addedTodoId={{newTodo.response.body.$.id}}
+GET http://localhost:3000/todos/{{addedTodoId}}
+
+###
+@addedTodoId={{newTodo.response.body.$.id}}
+DELETE http://localhost:3000/todos/{{addedTodoId}}
+
+###
+@addedTodoId={{newTodo.response.body.$.id}}
+PATCH http://localhost:3000/todos/{{addedTodoId}}
+Content-Type: application/json
+
+{
+    "completed": true
+}
+
+###
+POST http://localhost:3000/todos/persist

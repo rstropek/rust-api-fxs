@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "todo-logic",
+    "todo-axum",
+    "todo-rocket",
+    "todo-actix-web",
+    "todo-warp",
+]

@@ -1,0 +1,11 @@
+[package]
+name = "todo-actix-web"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4"
+todo-logic ={ path = "../todo-logic" }
+tokio = { version = "1.0", features = ["full"] }
+simplelog= "0"
+log = "0.4"
