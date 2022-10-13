@@ -13,6 +13,7 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+/// Type for our shared state
 type Db = Arc<RwLock<TodoStore>>;
 
 #[tokio::main]
@@ -25,13 +26,17 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // In-memory store of todos
+    // Create shared data store
     let db = Db::default();
 
+    // We register our shared state so that handlers can get it using the State extractor.
+    // Note that this will change in Axum 0.6. See more at
+    // https://docs.rs/axum/0.6.0-rc.2/axum/index.html#sharing-state-with-handlers
     let app = Router::with_state(db)
+        // Here we setup the routes. Note: No macros
         .route("/todos", get(get_todos).post(add_todo))
-        .route("/todos/persist", post(persist))
         .route("/todos/:id", delete(delete_todo).patch(update_todo).get(get_todo))
+        .route("/todos/persist", post(persist))
         // Using tower to add tracing layer
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()).into_inner());
 
@@ -43,18 +48,23 @@ async fn main() {
     axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap();
 }
 
+/// Get list of todo items
+///
+/// Note how the Query extractor is used to get query parameters. Note how the State
+/// extractor is used to get the database (changes in Axum 0.6 RC).
+/// Extractors are technically types that implement FromRequest. You can create
+/// your own extractors or use the ones provided by Axum.
 async fn get_todos(pagination: Option<Query<Pagination>>, State(db): State<Db>) -> impl IntoResponse {
-    // Note how the Query extractor is used to get query parameters
-    // Note how the State extractor is used to get the database (changes in Axum 0.6 RC)
-
     let todos = db.read().await;
     let Query(pagination) = pagination.unwrap_or_default();
+    // Json is an extractor and a response.
     Json(todos.get_todos(pagination))
 }
 
+/// Get a single todo item
+///
+/// Note how the Path extractor is used to get query parameters.
 async fn get_todo(Path(id): Path<usize>, State(db): State<Db>) -> impl IntoResponse {
-    // Note how the Path extractor is used to get query parameters
-
     let todos = db.read().await;
     if let Some(item) = todos.get_todo(id) {
         // Note how to return Json
@@ -65,12 +75,17 @@ async fn get_todo(Path(id): Path<usize>, State(db): State<Db>) -> impl IntoRespo
     }
 }
 
+/// Add a new todo item
+///
+/// Note that this time, Json is used as an extractor. This means that the request body
+/// will be deserialized into a TodoItem.
 async fn add_todo(State(db): State<Db>, Json(todo): Json<TodoItem>) -> impl IntoResponse {
     let mut todos = db.write().await;
     let todo = todos.add_todo(todo);
     (StatusCode::CREATED, Json(todo))
 }
 
+/// Delete a todo item
 async fn delete_todo(Path(id): Path<usize>, State(db): State<Db>) -> impl IntoResponse {
     if db.write().await.remove_todo(id).is_some() {
         StatusCode::NO_CONTENT
@@ -79,6 +94,7 @@ async fn delete_todo(Path(id): Path<usize>, State(db): State<Db>) -> impl IntoRe
     }
 }
 
+/// Update a todo item
 async fn update_todo(
     Path(id): Path<usize>,
     State(db): State<Db>,
@@ -92,16 +108,20 @@ async fn update_todo(
     }
 }
 
+/// Application-level error object
 enum AppError {
     UserRepo(TodoStoreError),
 }
-
 impl From<TodoStoreError> for AppError {
     fn from(inner: TodoStoreError) -> Self {
         AppError::UserRepo(inner)
     }
 }
 
+/// Logic for turning an error into a response.
+///
+/// By providing this trait, handlers can return AppError and Axum will automatically
+/// convert it into a response.
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
@@ -121,6 +141,7 @@ impl IntoResponse for AppError {
     }
 }
 
+/// Persist the todo store to disk
 async fn persist(State(db): State<Db>) -> Result<(), AppError> {
     tracing::debug!("Persisting todos");
     let todos = db.read().await;

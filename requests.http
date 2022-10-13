@@ -22,16 +22,16 @@ GET http://localhost:3000/todos/{{addedTodoId}}
 
 ###
 @addedTodoId={{newTodo.response.body.$.id}}
-DELETE http://localhost:3000/todos/{{addedTodoId}}
-
-###
-@addedTodoId={{newTodo.response.body.$.id}}
 PATCH http://localhost:3000/todos/{{addedTodoId}}
 Content-Type: application/json
 
 {
     "completed": true
 }
+
+###
+@addedTodoId={{newTodo.response.body.$.id}}
+DELETE http://localhost:3000/todos/{{addedTodoId}}
 
 ###
 POST http://localhost:3000/todos/persist

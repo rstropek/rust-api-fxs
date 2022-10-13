@@ -70,6 +70,7 @@ async fn get_todos(pagination: Query<Pagination>, db: Data<Db>) -> impl Responde
 /// the Either enum (https://actix.rs/docs/handlers/).
 type ItemOrStatus = Either<Json<IdentifyableTodoItem>, HttpResponse>;
 
+/// Get a single todo item
 async fn get_todo(id: Path<usize>, db: Data<Db>) -> ItemOrStatus {
     let todos = db.read().await;
     if let Some(item) = todos.get_todo(*id) {
@@ -82,6 +83,8 @@ async fn get_todo(id: Path<usize>, db: Data<Db>) -> ItemOrStatus {
 }
 
 /// Add a new todo item
+///
+/// Note the use of the Json extractor to extract the body.
 #[post("/todos")]
 async fn add_todo(db: Data<Db>, todo: Json<TodoItem>) -> impl Responder {
     let mut todos = db.write().await;
