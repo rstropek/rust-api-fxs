@@ -15,7 +15,6 @@ Content-Type: application/json
     "completed": false
 }
 
-
 ###
 @addedTodoId={{newTodo.response.body.$.id}}
 GET http://localhost:3000/todos/{{addedTodoId}}

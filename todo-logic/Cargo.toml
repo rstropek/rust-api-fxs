@@ -6,5 +6,9 @@ edition = "2021"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version= "1", features = ["fs"] }
+tokio = { version= "1", features = ["fs"], optional = true }
 thiserror = "1"
+
+[features]
+default = ["persist"]
+persist = ["dep:tokio"]

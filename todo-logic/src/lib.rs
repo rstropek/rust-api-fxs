@@ -3,6 +3,8 @@ use std::{
     collections::HashMap,
     sync::atomic::{AtomicUsize, Ordering},
 };
+
+#[cfg(feature = "persist")]
 use tokio::fs;
 
 /// Represents a single todo item
@@ -68,6 +70,20 @@ pub struct TodoStore {
     id_generator: AtomicUsize,
 }
 impl TodoStore {
+    pub fn from_hashmap(store: HashMap<usize, IdentifyableTodoItem>) -> Self {
+        let id_generator = AtomicUsize::new(
+            store
+                .keys()
+                .max()
+                .map(|v| v + 1)
+                .unwrap_or(0),
+        );
+        TodoStore {
+            store,
+            id_generator,
+        }
+    }
+
     /// Get list of todo items
     ///
     /// Supports pagination.
@@ -123,6 +139,7 @@ impl TodoStore {
     /// Store todo items to disk
     ///
     /// Used to demonstrate error handling.
+    #[cfg(feature = "persist")]
     pub async fn persist(&self) -> Result<(), TodoStoreError> {
         const FILENAME: &str = "todo_store.json";
 
@@ -132,5 +149,11 @@ impl TodoStore {
             .await
             .map_err(TodoStoreError::FileAccessError)?;
         Ok(())
+    }
+}
+
+impl From<TodoStore> for HashMap<usize, IdentifyableTodoItem> {
+    fn from(value: TodoStore) -> Self {
+        value.store
     }
 }

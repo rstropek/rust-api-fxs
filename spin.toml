@@ -1,0 +1,13 @@
+spin_version = "1"
+description = "Todo API in spin"
+name = "todo-spin"
+trigger = { type = "http", base = "/" }
+version = "0.1.0"
+
+[[component]]
+id = "todo-spin"
+source = "target/wasm32-wasi/debug/todo_spin.wasm"
+[component.trigger]
+route = "/todos/..."
+[component.build]
+command = "cargo build -p todo-spin --target wasm32-wasi"

@@ -5,4 +5,5 @@ members = [
     "todo-rocket",
     "todo-actix-web",
     "todo-warp",
+    "todo-spin",
 ]
