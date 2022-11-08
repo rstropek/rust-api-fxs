@@ -6,4 +6,5 @@ members = [
     "todo-actix-web",
     "todo-warp",
     "todo-spin",
+    "hero-manager-axum",
 ]

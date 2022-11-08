@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'hero-manager-axum'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=hero-manager-axum",
+                    "--package=hero-manager-axum"
+                ],
+                "filter": {
+                    "name": "hero-manager-axum",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'hero-manager-axum'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=hero-manager-axum",
+                    "--package=hero-manager-axum"
+                ],
+                "filter": {
+                    "name": "hero-manager-axum",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
