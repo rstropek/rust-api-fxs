@@ -1,14 +1,17 @@
-use axum::{Router, routing::get};
-use clap::{Parser, ValueEnum, crate_version};
+use axum::Router;
+use clap::{crate_version, Parser, ValueEnum};
 use serde::Serialize;
-use tokio::signal;
+
+use sqlx::postgres::PgPoolOptions;
 use std::{net::SocketAddr, sync::Arc};
+use tokio::signal;
 
 mod healthcheck;
-use crate::healthcheck::*;
 
 mod routes;
 use crate::routes::*;
+
+mod heroes;
 
 #[derive(Clone, ValueEnum, Debug, Serialize)]
 enum Environment {
@@ -20,11 +23,11 @@ enum Environment {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-   #[arg(short, long, default_value_t = 4000)]
-   port: u16,
+    #[arg(short, long, default_value_t = 4000)]
+    port: u16,
 
-   #[arg(short, long, default_value_t = Environment::Development, value_enum)]
-   env: Environment,
+    #[arg(short, long, default_value_t = Environment::Development, value_enum)]
+    env: Environment,
 }
 
 #[derive(Clone)]
@@ -37,13 +40,20 @@ pub struct AppState {
 async fn main() {
     let cli = Args::parse();
 
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect("postgres://postgres:password@localhost/test")
+        .await
+        .unwrap();
+
     let shared_state = Arc::new(AppState {
         version: crate_version!(),
         env: cli.env,
     });
 
     let app = Router::new()
-        .merge(healthcheck_routes(shared_state.clone()));
+        .merge(healthcheck_routes(shared_state.clone()))
+        .nest("/heroes", heroes_routes(pool));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cli.port));
     println!("listening on {}", addr);
@@ -56,9 +66,7 @@ async fn main() {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
+        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]

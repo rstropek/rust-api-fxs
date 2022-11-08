@@ -1,0 +1,29 @@
+set dotenv-load
+
+install-sqlx:
+    cargo install sqlx-cli
+
+start-pg:
+    docker run --name postgres-dev -e POSTGRES_PASSWORD=mysecretpassword -d -p 5432:5432 postgres
+
+start-psql:
+    docker run -it --rm --link postgres-dev:postgres postgres psql -h postgres -U postgres
+
+run-psql stmt:
+    docker run -t --rm --link postgres-dev:postgres postgres psql -d "$CONTAINER_DB_DSN" -c "{{stmt}}"
+
+get-db-user:
+    just run-psql "SELECT current_user"
+
+create-db:
+    sqlx database create
+
+create-migrations:
+    sqlx migrate add -r create_heroes_table
+    sqlx migrate add -r add_heroes_check_constraints
+
+apply-migrations:
+    sqlx migrate run
+
+describe-table table:
+    just run-psql "\d {{table}}"
