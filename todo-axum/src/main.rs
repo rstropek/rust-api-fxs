@@ -14,6 +14,9 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Type for our shared state
+///
+/// In our sample application, we store the todo list in memory. As the state is shared
+/// between concurrently running web requests, we need to make it thread-safe.
 type Db = Arc<RwLock<TodoStore>>;
 
 #[tokio::main]

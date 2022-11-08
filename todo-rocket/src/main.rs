@@ -12,6 +12,9 @@ use std::sync::Arc;
 use todo_logic::{IdentifyableTodoItem, Pagination, TodoItem, TodoStore, TodoStoreError, UpdateTodoItem};
 
 /// Type for our shared state
+///
+/// In our sample application, we store the todo list in memory. As the state is shared
+/// between concurrently running web requests, we need to make it thread-safe.
 type Db = Arc<RwLock<TodoStore>>;
 
 /// Rocket relies heavily on macros. The launch macro will generate a
