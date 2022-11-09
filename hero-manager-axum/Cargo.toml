@@ -20,3 +20,7 @@ tower-http = { version = "0.3.0", features = ["trace", "catch-panic"] }
 axum-macros = "0.2"
 validator = { version = "0.16", features = ["derive"] }
 thiserror = "1.0"
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }
+hyper = { version = "0.14", features = ["full"] }

@@ -19,7 +19,7 @@ mod model;
 use error::Error;
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Clone, ValueEnum, Debug, Serialize)]
+#[derive(Clone, ValueEnum, Debug, Serialize, PartialEq, Eq)]
 enum Environment {
     Development,
     Test,

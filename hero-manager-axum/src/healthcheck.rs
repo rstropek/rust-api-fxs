@@ -76,3 +76,31 @@ pub async fn failing_healthcheck_1() -> crate::Result<()> {
 pub async fn failing_healthcheck_2() -> Infallible {
     panic!("Something very bad happened");
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn hello_world() {
+        let app = healthcheck_routes(Arc::new(AppState{env: Environment::Development, version: "1.0.0"}));
+
+        // `Router` implements `tower::Service<Request<Body>>` so we can
+        // call it like any tower service, no need to run an HTTP server.
+        let response = app
+            .oneshot(Request::builder().uri("/health_1").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let v: serde_json::Value = serde_json::from_str(String::from_utf8(body.to_vec()).unwrap().as_str()).unwrap();
+
+        assert_eq!(v.get("version").unwrap(), "1.0.0");
+        assert_eq!(*v.get("env").unwrap(), serde_json::to_value(Environment::Development).unwrap());
+    }
+}

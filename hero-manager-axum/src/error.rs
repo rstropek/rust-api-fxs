@@ -51,4 +51,3 @@ pub fn handle_panic(err: Box<dyn Any + Send + 'static>) -> Response<Body> {
         .body(Body::from(serde_json::to_string(&problem).unwrap()))
         .unwrap()
 }
-
