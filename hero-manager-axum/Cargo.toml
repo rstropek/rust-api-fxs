@@ -5,8 +5,11 @@ edition = "2021"
 
 [dependencies]
 axum = "0.6.0-rc.2"
-clap = { version = "4.0.22", features = ["derive", "cargo"] }
+clap = { version = "4.0.22", features = ["derive", "cargo", "env"] }
 tokio = { version = "1.0", features = ["full"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "postgres" ] }
+sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "postgres", "chrono" ] }
+chrono = { version = "0.4", features = [ "serde" ] }
+anyhow = "1.0"
+http-api-problem = { version = "0.55", features = [ "axum" ] }

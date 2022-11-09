@@ -2,16 +2,18 @@ use axum::Router;
 use clap::{crate_version, Parser, ValueEnum};
 use serde::Serialize;
 
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{postgres::PgPoolOptions, pool::PoolConnection, Postgres};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::signal;
 
 mod healthcheck;
 
 mod routes;
-use crate::routes::*;
+use crate::{routes::*};
 
 mod heroes;
+
+mod data;
 
 #[derive(Clone, ValueEnum, Debug, Serialize)]
 enum Environment {
@@ -28,12 +30,15 @@ struct Args {
 
     #[arg(short, long, default_value_t = Environment::Development, value_enum)]
     env: Environment,
+
+    #[arg(short, long, default_value = "", env = "DATABASE_URL")]
+    database_url: String,
 }
 
 #[derive(Clone)]
 pub struct AppState {
     version: &'static str,
-    env: Environment,
+    env: Environment
 }
 
 #[tokio::main]
@@ -42,9 +47,9 @@ async fn main() {
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect("postgres://postgres:password@localhost/test")
+        .connect(&cli.database_url)
         .await
-        .unwrap();
+        .expect("can connect to database");
 
     let shared_state = Arc::new(AppState {
         version: crate_version!(),

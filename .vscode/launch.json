@@ -20,7 +20,10 @@
                 }
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "DATABASE_URL": "postgres://postgres:mysecretpassword@localhost/heroes"
+            }
         },
         {
             "type": "lldb",

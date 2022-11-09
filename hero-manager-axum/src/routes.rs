@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use axum::{Router, routing::get, body::Body};
+use axum::{Router, routing::{get, post}, body::Body};
 use sqlx::{PgPool, Postgres, Pool};
 
-use crate::{AppState, healthcheck::*, heroes::get_all_heroes};
+use crate::{AppState, healthcheck::*, heroes::{get_all_heroes, insert_hero}, data::{DatabaseConnection}};
 
 pub fn healthcheck_routes(shared_state: Arc<AppState>) -> Router<AppState, Body> {
     Router::with_state_arc(shared_state)
@@ -15,5 +15,5 @@ pub fn healthcheck_routes(shared_state: Arc<AppState>) -> Router<AppState, Body>
 
 pub fn heroes_routes(pool: PgPool) -> Router<Pool<Postgres>, Body> {
     Router::with_state(pool)
-        .route("/", get(get_all_heroes))
+        .route("/", post(insert_hero))
 }
