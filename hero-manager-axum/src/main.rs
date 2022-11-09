@@ -12,8 +12,8 @@ mod routes;
 use crate::{routes::*};
 
 mod heroes;
-
 mod data;
+mod problem_details;
 
 #[derive(Clone, ValueEnum, Debug, Serialize)]
 enum Environment {

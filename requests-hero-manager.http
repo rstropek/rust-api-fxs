@@ -18,6 +18,6 @@ Content-Type: application/json
     "firstSeen": "1935-01-01T00:00:00Z",
     "canFly": true,
     "realname": "Clark Kent",
-    "abilities": "super strong, can disguise with glasses, a, b, c, d, e"
+    "abilities": "super strong, can disguise with glasses"
 }
 

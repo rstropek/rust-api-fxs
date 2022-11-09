@@ -1,9 +1,8 @@
 use axum::{response::IntoResponse, Json, http::StatusCode};
 use chrono::{DateTime, Utc};
-use http_api_problem::{HttpApiProblem, into_axum_response};
 use serde::{Deserialize, Deserializer};
 
-use crate::data::{self, DatabaseConnection};
+use crate::{data::{self, DatabaseConnection}, problem_details::ProblemDetail};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,10 +24,6 @@ where D: Deserializer<'de> {
     }
 }
 
-/// Healthcheck handler
-///
-/// This implementation demonstrates how to manually build a response.
-/// For more details see https://docs.rs/axum/0.6.0-rc.2/axum/response/index.html#building-responses
 pub async fn get_all_heroes(DatabaseConnection(conn): DatabaseConnection) -> impl IntoResponse {
     todo!("get_all_heroes")
 }
@@ -36,22 +31,16 @@ pub async fn get_all_heroes(DatabaseConnection(conn): DatabaseConnection) -> imp
 pub async fn insert_hero(conn: DatabaseConnection, Json(hero): Json<AddHeroDto>) -> impl IntoResponse {
     if let Some(abilities) = &hero.abilities {
         if abilities.len() > 5 {
-            let problem = HttpApiProblem::new(StatusCode::BAD_REQUEST)
-                .type_url("https://example.com/errors/invalid-abilities")
-                .title("Invalid abilities")
-                .detail("The number of abilities must not exceed 5");
-            return into_axum_response(problem).into_response();
+            return ProblemDetail::UnprocessableEntity("Too many abilities").into_response();
         }
     }
 
-    let hero = data::Hero {
-        id: 0,
+    let hero = data::NewHero {
         first_seen: hero.first_seen,
         name: hero.name,
         can_fly: hero.can_fly,
         realname: hero.realname,
         abilities: hero.abilities,
-        version: 1,
     };
 
     data::insert(conn, &hero).await.unwrap();

@@ -1,13 +1,33 @@
-use axum::{async_trait, extract::{FromRequestParts, FromRef}, http::{StatusCode, request::Parts}};
-use sqlx::{PgPool, postgres::PgQueryResult, types::chrono::{DateTime, Utc}};
+use axum::{
+    async_trait,
+    extract::{FromRef, FromRequestParts},
+    http::{request::Parts, StatusCode},
+};
+use sqlx::{
+    types::chrono::{DateTime, Utc},
+    PgPool,
+};
 
 pub struct Hero {
-    pub id: i32,
+    pub id: i64,
     pub first_seen: DateTime<Utc>,
     pub name: String,
     pub can_fly: bool,
     pub realname: Option<String>,
     pub abilities: Option<Vec<String>>,
+    pub version: i32,
+}
+
+pub struct NewHero {
+    pub first_seen: DateTime<Utc>,
+    pub name: String,
+    pub can_fly: bool,
+    pub realname: Option<String>,
+    pub abilities: Option<Vec<String>>,
+}
+
+pub struct HeroPkVersion {
+    pub id: i64,
     pub version: i32,
 }
 
@@ -37,17 +57,23 @@ where
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }
 
-pub async fn insert(DatabaseConnection(conn): DatabaseConnection, hero: &Hero) -> anyhow::Result<()> {
+pub async fn insert(DatabaseConnection(conn): DatabaseConnection, hero: &NewHero) -> anyhow::Result<HeroPkVersion> {
     let mut conn = conn;
-    sqlx::query(r#"INSERT INTO heroes (id, first_seen, name, can_fly, realname, abilities, version) VALUES ($1, $2, $3, $4, $5, $6, $7)"#)
-        .bind(hero.id)
-        .bind(hero.first_seen)
-        .bind(&hero.name)
-        .bind(hero.can_fly)
-        .bind(&hero.realname)
-        .bind(&hero.abilities)
-        .bind(hero.version)
-        .execute(&mut conn)
-        .await?;
-    Ok(())
+    let pk: (i64, i32) = sqlx::query_as(
+        r#"
+        INSERT INTO heroes (first_seen, name, can_fly, realname, abilities)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, version"#,
+    )
+    .bind(hero.first_seen)
+    .bind(&hero.name)
+    .bind(hero.can_fly)
+    .bind(&hero.realname)
+    .bind(&hero.abilities)
+    .fetch_one(&mut conn)
+    .await?;
+    Ok(HeroPkVersion {
+        id: pk.0,
+        version: pk.1,
+    })
 }
