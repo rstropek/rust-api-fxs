@@ -1,49 +1,63 @@
-use axum::{response::IntoResponse, Json, http::StatusCode};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer};
+use axum::{
+    http::{
+        header::LOCATION,
+        HeaderMap, StatusCode,
+    },
+    response::IntoResponse,
+    Json,
+};
 
-use crate::{data::{self, DatabaseConnection}, problem_details::ProblemDetail};
+use tracing::error;
+use validator::Validate;
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AddHeroDto {
-    pub first_seen: DateTime<Utc>,
-    pub name: String,
-    pub can_fly: bool,
-    pub realname: Option<String>,
-    #[serde(deserialize_with = "deserialize_abilities", default)]
-    pub abilities: Option<Vec<String>>,
+use crate::{data::{self, DatabaseConnection}, model::{IdentifyableHero, Hero}};
+
+use axum::{Router, routing::post, body::Body};
+use sqlx::{PgPool, Postgres, Pool};
+
+pub fn heroes_routes(pool: PgPool) -> Router<Pool<Postgres>, Body> {
+    Router::with_state(pool)
+        .route("/", post(insert_hero).get(get_all_heroes))
+        .route("/cleanup", post(cleanup_heroes))
 }
 
-fn deserialize_abilities<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
-where D: Deserializer<'de> {
-    let concat_abilities = Option::<String>::deserialize(deserializer)?;
-    match concat_abilities {
-        Some(abilities) => Ok(Some(abilities.split(',').map(|s| s.trim().to_string()).collect())),
-        None => Ok(None)
-    }
+pub async fn get_all_heroes(conn: DatabaseConnection) -> crate::Result<Json<Vec<IdentifyableHero>>> {
+    let heroes = data::get_by_name(conn, "%").await.map_err(|e| {
+        error!("Failed to execute SELECT {:?}", e);
+        e
+    })?;
+    Ok(Json(heroes))
 }
 
-pub async fn get_all_heroes(DatabaseConnection(conn): DatabaseConnection) -> impl IntoResponse {
-    todo!("get_all_heroes")
+pub async fn cleanup_heroes(conn: DatabaseConnection) -> crate::Result<impl IntoResponse> {
+    data::cleanup(conn).await.map_err(|e| {
+        error!("Failed to execute DELETE {:?}", e);
+        e
+    })?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn insert_hero(conn: DatabaseConnection, Json(hero): Json<AddHeroDto>) -> impl IntoResponse {
-    if let Some(abilities) = &hero.abilities {
-        if abilities.len() > 5 {
-            return ProblemDetail::UnprocessableEntity("Too many abilities").into_response();
-        }
-    }
+pub async fn insert_hero(conn: DatabaseConnection, Json(hero): Json<Hero>) -> crate::Result<impl IntoResponse> {
+    hero.validate()?;
 
-    let hero = data::NewHero {
-        first_seen: hero.first_seen,
-        name: hero.name,
-        can_fly: hero.can_fly,
-        realname: hero.realname,
-        abilities: hero.abilities,
-    };
+    let hero_pk = data::insert(conn, &hero).await.map_err(|e| {
+        error!("Failed to execute INSERT {:?}", e);
+        e
+    })?;
 
-    data::insert(conn, &hero).await.unwrap();
-
-    StatusCode::OK.into_response()
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        LOCATION,
+        format!("/heroes/{}", hero_pk.id).parse().expect("Parsing location header should never fail"),
+    );
+    Ok((
+        StatusCode::OK,
+        headers,
+        Json(IdentifyableHero {
+            id: hero_pk.id,
+            inner_hero: hero,
+            version: hero_pk.version,
+        }),
+    )
+        .into_response())
 }

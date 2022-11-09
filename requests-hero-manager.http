@@ -10,14 +10,25 @@ GET http://localhost:4000/health_3
 GET http://localhost:4000/health_4
 
 ###
+GET http://localhost:4000/health_failing_1
+
+###
+GET http://localhost:4000/health_failing_2
+
+###
+GET http://localhost:4000/heroes
+
+###
 POST http://localhost:4000/heroes
 Content-Type: application/json
 
 {
-    "name": "Superman",
+    "name": "Superman2",
     "firstSeen": "1935-01-01T00:00:00Z",
     "canFly": true,
     "realname": "Clark Kent",
     "abilities": "super strong, can disguise with glasses"
 }
 
+###
+POST http://localhost:4000/heroes/cleanup

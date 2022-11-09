@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS IX_name;

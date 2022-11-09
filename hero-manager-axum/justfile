@@ -21,6 +21,7 @@ create-db:
 create-migrations:
     sqlx migrate add -r create_heroes_table
     sqlx migrate add -r add_heroes_check_constraints
+    sqlx migrate add -r add_unique_name
 
 apply-migrations:
     sqlx migrate run

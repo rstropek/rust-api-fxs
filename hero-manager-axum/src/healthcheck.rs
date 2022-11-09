@@ -1,8 +1,20 @@
-use axum::{response::{IntoResponse, Response}, extract::State, http::{StatusCode, header}, body::{Full, Bytes}, Json};
+use std::{convert::Infallible, sync::Arc};
+
+use axum::{response::{IntoResponse, Response}, extract::State, http::{StatusCode, header}, body::{Full, Bytes, Body}, Json, Router, routing::get};
 use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::{AppState, Environment};
+
+pub fn healthcheck_routes(shared_state: Arc<AppState>) -> Router<AppState, Body> {
+    Router::with_state_arc(shared_state)
+        .route("/health_1", get(healthcheck_handler_1))
+        .route("/health_2", get(healthcheck_handler_2))
+        .route("/health_3", get(healthcheck_handler_3))
+        .route("/health_4", get(healthcheck_handler_4))
+        .route("/health_failing_1", get(failing_healthcheck_1))
+        .route("/health_failing_2", get(failing_healthcheck_2))
+}
 
 /// Healthcheck handler
 ///
@@ -55,4 +67,12 @@ pub async fn healthcheck_handler_4(State(state): State<AppState>) -> Json<Health
         version: state.version,
         env: state.env.clone(),
     })
+}
+
+pub async fn failing_healthcheck_1() -> crate::Result<()> {
+    Err(crate::Error::Anyhow(anyhow::anyhow!("Something bad happened")))
+}
+
+pub async fn failing_healthcheck_2() -> Infallible {
+    panic!("Something very bad happened");
 }

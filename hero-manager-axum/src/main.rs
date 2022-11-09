@@ -2,18 +2,22 @@ use axum::Router;
 use clap::{crate_version, Parser, ValueEnum};
 use serde::Serialize;
 
-use sqlx::{postgres::PgPoolOptions, pool::PoolConnection, Postgres};
+use sqlx::postgres::PgPoolOptions;
+use tower_http::{trace::TraceLayer, catch_panic::CatchPanicLayer};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::signal;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tower::ServiceBuilder;
 
 mod healthcheck;
-
-mod routes;
-use crate::{routes::*};
-
 mod heroes;
 mod data;
-mod problem_details;
+mod axum_helpers;
+mod error;
+mod model;
+
+use error::Error;
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Clone, ValueEnum, Debug, Serialize)]
 enum Environment {
@@ -56,9 +60,23 @@ async fn main() {
         env: cli.env,
     });
 
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::new(
+            std::env::var("RUST_LOG")
+                .unwrap_or_else(|_| "hero_manager_axum=debug,tower_http=debug,sqlx=info".into()),
+        ))
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     let app = Router::new()
-        .merge(healthcheck_routes(shared_state.clone()))
-        .nest("/heroes", heroes_routes(pool));
+    .merge(healthcheck::healthcheck_routes(shared_state.clone()))
+    .nest("/heroes", heroes::heroes_routes(pool))
+    .layer(
+        ServiceBuilder::new()
+                .layer(TraceLayer::new_for_http())
+                .layer(CatchPanicLayer::custom(error::handle_panic))
+                .into_inner(),
+        );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cli.port));
     println!("listening on {}", addr);

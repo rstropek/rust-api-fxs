@@ -13,3 +13,10 @@ sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "postgres", 
 chrono = { version = "0.4", features = [ "serde" ] }
 anyhow = "1.0"
 http-api-problem = { version = "0.55", features = [ "axum" ] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tower = "0.4"
+tower-http = { version = "0.3.0", features = ["trace", "catch-panic"] }
+axum-macros = "0.2"
+validator = { version = "0.16", features = ["derive"] }
+thiserror = "1.0"
