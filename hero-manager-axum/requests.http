@@ -16,14 +16,14 @@ GET http://localhost:4000/health_failing_1
 GET http://localhost:4000/health_failing_2
 
 ###
-GET http://localhost:4000/heroes?name=%man2
+GET http://localhost:4000/heroes?name=%man%
 
 ###
 POST http://localhost:4000/heroes
 Content-Type: application/json
 
 {
-    "name": "Superman2",
+    "name": "Superman21",
     "firstSeen": "1935-01-01T00:00:00Z",
     "canFly": true,
     "realname": "Clark Kent",

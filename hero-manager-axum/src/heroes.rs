@@ -1,11 +1,13 @@
+use std::sync::Arc;
+
 use crate::{
-    data::{self, DatabaseConnection},
+    data::{DatabaseConnection, HeroesRepositoryTrait},
     model::{Hero, IdentifyableHero},
 };
 
 use axum::{
     body::Body,
-    extract::Query,
+    extract::{Query, State},
     http::{header::LOCATION, HeaderMap, StatusCode},
     response::IntoResponse,
     routing::post,
@@ -21,8 +23,11 @@ fn log(e: sqlx::Error) -> sqlx::Error {
     e
 }
 
-pub fn heroes_routes(pool: PgPool) -> Router<Pool<Postgres>, Body> {
-    Router::with_state(pool)
+pub type DynHeroesRepository = Arc<dyn HeroesRepositoryTrait + Send + Sync>;
+
+//pub fn heroes_routes(pool: PgPool) -> Router<Pool<Postgres>, Body> {
+pub fn heroes_routes(repo: DynHeroesRepository) -> Router<DynHeroesRepository, Body> {
+    Router::with_state(repo)
         .route("/", post(insert_hero).get(get_heroes))
         .route("/cleanup", post(cleanup_heroes))
 }
@@ -35,24 +40,28 @@ pub struct GetHeroFilter {
 }
 
 pub async fn get_heroes(
-    conn: DatabaseConnection,
+    State(repo): State<DynHeroesRepository>,
     filter: Query<GetHeroFilter>,
 ) -> crate::Result<Json<Vec<IdentifyableHero>>> {
-    let heroes = data::get_by_name(conn, filter.name_filter.as_deref().unwrap_or("%"))
+    let heroes = repo
+        .get_by_name(filter.name_filter.as_deref().unwrap_or("%"))
         .await
         .map_err(log)?;
     Ok(Json(heroes))
 }
 
-pub async fn cleanup_heroes(conn: DatabaseConnection) -> crate::Result<impl IntoResponse> {
-    data::cleanup(conn).await.map_err(log)?;
+pub async fn cleanup_heroes(State(repo): State<DynHeroesRepository>) -> crate::Result<impl IntoResponse> {
+    repo.cleanup().await.map_err(log)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn insert_hero(conn: DatabaseConnection, Json(hero): Json<Hero>) -> crate::Result<impl IntoResponse> {
+pub async fn insert_hero(
+    State(repo): State<DynHeroesRepository>,
+    Json(hero): Json<Hero>,
+) -> crate::Result<impl IntoResponse> {
     hero.validate()?;
 
-    let hero_pk = data::insert(conn, &hero).await.map_err(log)?;
+    let hero_pk = repo.insert(&hero).await.map_err(log)?;
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -71,4 +80,36 @@ pub async fn insert_hero(conn: DatabaseConnection, Json(hero): Json<Hero>) -> cr
         }),
     )
         .into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::data::MockHeroesRepositoryTrait;
+
+    use super::*;
+    use axum::http::Request;
+    use sqlx::postgres::PgPoolOptions;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn hello_world() {
+        let mut repo_mock = MockHeroesRepositoryTrait::new();
+        repo_mock.expect_cleanup().returning(|| Ok(()));
+
+        let mut repo = Arc::new(repo_mock) as DynHeroesRepository;
+
+        let app = heroes_routes(repo).into_service();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/cleanup")
+                    .method("POST")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
 }

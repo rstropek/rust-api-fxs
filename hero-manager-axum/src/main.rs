@@ -17,6 +17,8 @@ mod error;
 mod model;
 
 use error::Error;
+
+use crate::{data::HeroesRepository, heroes::DynHeroesRepository};
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Clone, ValueEnum, Debug, Serialize, PartialEq, Eq)]
@@ -68,15 +70,17 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    let repo = Arc::new(HeroesRepository(pool)) as DynHeroesRepository;
+
     let app = Router::new()
-    .merge(healthcheck::healthcheck_routes(shared_state.clone()))
-    .nest("/heroes", heroes::heroes_routes(pool))
-    .layer(
-        ServiceBuilder::new()
-                .layer(TraceLayer::new_for_http())
-                .layer(CatchPanicLayer::custom(error::handle_panic))
-                .into_inner(),
-        );
+        .merge(healthcheck::healthcheck_routes(shared_state.clone()))
+        .nest("/heroes", heroes::heroes_routes(repo))
+        .layer(
+            ServiceBuilder::new()
+                    .layer(TraceLayer::new_for_http())
+                    .layer(CatchPanicLayer::custom(error::handle_panic))
+                    .into_inner(),
+            );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cli.port));
     println!("listening on {}", addr);
