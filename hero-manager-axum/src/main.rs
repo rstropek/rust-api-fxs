@@ -1,33 +1,21 @@
+use crate::{data::HeroesRepository, heroes::DynHeroesRepository, model::AppConfiguration};
 use axum::Router;
-use clap::{crate_version, Parser, ValueEnum};
-use serde::Serialize;
-
+use clap::{crate_version, Parser};
+use model::Environment;
 use sqlx::postgres::PgPoolOptions;
-use tower_http::{trace::TraceLayer, catch_panic::CatchPanicLayer};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::signal;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use tower::ServiceBuilder;
+use tower_http::{catch_panic::CatchPanicLayer, trace::TraceLayer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod data;
+mod error;
 mod healthcheck;
 mod heroes;
-mod data;
-mod axum_helpers;
-mod error;
 mod model;
 
-use error::Error;
-
-use crate::{data::HeroesRepository, heroes::DynHeroesRepository};
-type Result<T, E = Error> = std::result::Result<T, E>;
-
-#[derive(Clone, ValueEnum, Debug, Serialize, PartialEq, Eq)]
-enum Environment {
-    Development,
-    Test,
-    Production,
-}
-
+/// Arguments for clap
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -41,46 +29,46 @@ struct Args {
     database_url: String,
 }
 
-#[derive(Clone)]
-pub struct AppState {
-    version: &'static str,
-    env: Environment
-}
-
 #[tokio::main]
 async fn main() {
+    // Parse command-line args
     let cli = Args::parse();
 
+    // Setup connection pool
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&cli.database_url)
         .await
         .expect("can connect to database");
 
-    let shared_state = Arc::new(AppState {
+    // Build app configuration object
+    let app_config = Arc::new(AppConfiguration {
         version: crate_version!(),
         env: cli.env,
     });
 
+    // Configure tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "hero_manager_axum=debug,tower_http=debug,sqlx=info".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "hero_manager_axum=debug,tower_http=debug,sqlx=debug".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     let repo = Arc::new(HeroesRepository(pool)) as DynHeroesRepository;
 
+    // Setup top-level router
     let app = Router::new()
-        .merge(healthcheck::healthcheck_routes(shared_state.clone()))
+        // Add healthcheck routes
+        .merge(healthcheck::healthcheck_routes(app_config.clone()))
+        // Add heroes routes under /heroes
         .nest("/heroes", heroes::heroes_routes(repo))
         .layer(
             ServiceBuilder::new()
-                    .layer(TraceLayer::new_for_http())
-                    .layer(CatchPanicLayer::custom(error::handle_panic))
-                    .into_inner(),
-            );
+                .layer(TraceLayer::new_for_http())
+                .layer(CatchPanicLayer::custom(error::handle_panic))
+                .into_inner(),
+        );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cli.port));
     println!("listening on {}", addr);

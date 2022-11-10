@@ -34,7 +34,7 @@ async fn main() {
 
     // We register our shared state so that handlers can get it using the State extractor.
     // Note that this will change in Axum 0.6. See more at
-    // https://docs.rs/axum/0.6.0-rc.2/axum/index.html#sharing-state-with-handlers
+    // https://docs.rs/axum/0.6.0-rc.4/axum/index.html#sharing-state-with-handlers
     let app = Router::with_state(db)
         // Here we setup the routes. Note: No macros
         .route("/todos", get(get_todos).post(add_todo))

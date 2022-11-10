@@ -1,40 +1,56 @@
-use axum::async_trait;
-use sqlx::{pool::PoolConnection, Postgres, PgPool};
-use tracing::error;
-#[cfg(test)]
-use mockall::{automock, mock, predicate::*};
+// Data access layer for our sample
+//
+// This sample module implements a simple data access layer with sqlx and Postgres.
+// A core idea of this sample implementation is the use of a trait with automock.
+// With that, web API handler functions can be unit-tested.
+//
+// Note that this sample focusses on web APIs and Axum. Therefore, no integration
+// tests have been developed with sqlx (read more about that topic at
+// https://docs.rs/sqlx/latest/sqlx/attr.test.html).
 
 use crate::model::{Hero, IdentifyableHero};
+use axum::async_trait;
+#[cfg(test)]
+use mockall::automock;
+use sqlx::{pool::PoolConnection, PgPool, Postgres};
+use tracing::error;
 
+/// Represents primary key and version data for a hero
 pub struct HeroPkVersion {
     pub id: i64,
     pub version: i32,
 }
 
-pub struct DatabaseConnection(pub PoolConnection<Postgres>);
+/// Type alias for a pooled connection to Postres
+type DatabaseConnection = PoolConnection<Postgres>;
 
+/// Logs an sqlx error
+pub fn log_error(e: sqlx::Error) -> sqlx::Error {
+    error!("Failed to execute SQL statement: {:?}", e);
+    e
+}
+
+/// Repository for maintaining heroes in the DB
 #[cfg_attr(test, automock)]
 #[async_trait]
 pub trait HeroesRepositoryTrait {
+    /// Deletes all heroes from the DB
     async fn cleanup(&self) -> Result<(), sqlx::error::Error>;
-    async fn get_by_name(
-        &self,
-        name: &str,
-    ) -> Result<Vec<IdentifyableHero>, sqlx::error::Error>;
-    async fn insert(
-        &self,
-        hero: &Hero,
-    ) -> Result<HeroPkVersion, sqlx::error::Error>;
+
+    /// Gets a list of heroes from the DB filted by name
+    async fn get_by_name(&self, name: &str) -> Result<Vec<IdentifyableHero>, sqlx::error::Error>;
+
+    /// Insert a new hero in the DB
+    async fn insert(&self, hero: &Hero) -> Result<HeroPkVersion, sqlx::error::Error>;
 }
 
+/// Implementation of the heroes repository
 pub struct HeroesRepository(pub PgPool);
 
 impl HeroesRepository {
+    /// Helper functions for getting a connection for the DB pool
     async fn get_connection(&self) -> Result<DatabaseConnection, sqlx::error::Error> {
-        Ok(DatabaseConnection(self.0.acquire().await.map_err(|e| {
-            error!("Failed to acquire connection from pool: {}", e);
-            e
-        })?))
+        self.0.acquire().await.map_err(log_error)
     }
 }
 
@@ -42,27 +58,19 @@ impl HeroesRepository {
 impl HeroesRepositoryTrait for HeroesRepository {
     async fn cleanup(&self) -> Result<(), sqlx::error::Error> {
         let mut conn = self.get_connection().await?;
-        sqlx::query("DELETE FROM heroes").execute(&mut conn.0).await?;
+        sqlx::query("DELETE FROM heroes").execute(&mut conn).await?;
         Ok(())
     }
 
-    async fn get_by_name(
-        &self,
-        name: &str,
-    ) -> Result<Vec<IdentifyableHero>, sqlx::error::Error> {
+    async fn get_by_name(&self, name: &str) -> Result<Vec<IdentifyableHero>, sqlx::error::Error> {
         let mut conn = self.get_connection().await?;
-        //let mut conn = self.0;
         sqlx::query_as::<_, IdentifyableHero>("SELECT * FROM heroes WHERE name LIKE $1")
             .bind(name)
-            .fetch_all(&mut conn.0)
+            .fetch_all(&mut conn)
             .await
     }
 
-    async fn insert(
-        &self,
-        hero: &Hero,
-    ) -> Result<HeroPkVersion, sqlx::error::Error> {
-        //let mut conn = self.0;
+    async fn insert(&self, hero: &Hero) -> Result<HeroPkVersion, sqlx::error::Error> {
         let mut conn = self.get_connection().await?;
         let pk: (i64, i32) = sqlx::query_as(
             r#"
@@ -75,7 +83,7 @@ impl HeroesRepositoryTrait for HeroesRepository {
         .bind(hero.can_fly)
         .bind(&hero.realname)
         .bind(&hero.abilities)
-        .fetch_one(&mut conn.0)
+        .fetch_one(&mut conn)
         .await?;
         Ok(HeroPkVersion {
             id: pk.0,

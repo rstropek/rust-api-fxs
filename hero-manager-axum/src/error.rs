@@ -1,10 +1,16 @@
-use axum::{http::{StatusCode, header}, body::Body, response::{IntoResponse, Response}, Json};
+// Helpers for error handling
 
+use axum::{
+    body::Body,
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
 use http_api_problem::HttpApiProblem;
+use std::any::Any;
 use validator::ValidationErrors;
 
-use std::any::Any;
-
+/// Represents an application-level error
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("an internal database error occurred")]
@@ -16,6 +22,9 @@ pub enum Error {
     #[error("validation error in request body")]
     InvalidEntity(#[from] ValidationErrors),
 }
+
+/// Type alias for Results that use our application-level error enum
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {

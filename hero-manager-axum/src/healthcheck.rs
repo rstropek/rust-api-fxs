@@ -1,12 +1,27 @@
+/// Healtheck routes and handlers
+///
+/// This part of the sample demonstrates various ways for how to
+/// build web responses based on a healthcheck endpoint.
+/// We also use the healthcheck endpoints to demonstrate some
+/// principles about testing handlers.
+
+use axum::{
+    body::{Body, Bytes, Full},
+    extract::State,
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
+    routing::get,
+    Json, Router,
+};
+use serde::Serialize;
+use serde_json::{json, Value};
 use std::{convert::Infallible, sync::Arc};
 
-use axum::{response::{IntoResponse, Response}, extract::State, http::{StatusCode, header}, body::{Full, Bytes, Body}, Json, Router, routing::get};
-use serde::Serialize;
-use serde_json::{Value, json};
+use crate::{AppConfiguration, Environment, error};
 
-use crate::{AppState, Environment};
-
-pub fn healthcheck_routes(shared_state: Arc<AppState>) -> Router<Arc<AppState>, Body> {
+/// Setup healthcheck API routes
+pub fn healthcheck_routes(shared_state: Arc<AppConfiguration>) -> Router<Arc<AppConfiguration>, Body> {
+    // Note that we are using the new state sharing API of the latest RC of Axum here.
     Router::with_state(shared_state)
         .route("/health_1", get(healthcheck_handler_1))
         .route("/health_2", get(healthcheck_handler_2))
@@ -19,8 +34,8 @@ pub fn healthcheck_routes(shared_state: Arc<AppState>) -> Router<Arc<AppState>, 
 /// Healthcheck handler
 ///
 /// This implementation demonstrates how to manually build a response.
-/// For more details see https://docs.rs/axum/0.6.0-rc.2/axum/response/index.html#building-responses
-pub async fn healthcheck_handler_1(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+/// For more details see https://docs.rs/axum/0.6.0-rc.4/axum/response/index.html#building-responses
+pub async fn healthcheck_handler_1(State(state): State<Arc<AppConfiguration>>) -> impl IntoResponse {
     (
         StatusCode::OK,
         [(header::CONTENT_TYPE, "application/json")],
@@ -31,20 +46,23 @@ pub async fn healthcheck_handler_1(State(state): State<Arc<AppState>>) -> impl I
 /// Healthcheck handler
 ///
 /// This implementation demonstrates how to build a response with low-level builder.
-/// For more details see https://docs.rs/axum/0.6.0-rc.2/axum/response/index.html#building-responses
-pub async fn healthcheck_handler_2(State(state): State<Arc<AppState>>) -> Response<Full<Bytes>> {
+/// For more details see https://docs.rs/axum/0.6.0-rc.4/axum/response/index.html#building-responses
+pub async fn healthcheck_handler_2(State(state): State<Arc<AppConfiguration>>) -> Response<Full<Bytes>> {
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Full::from(format!(r#"{{"version":"{0}","env":"{1:?}"}}"#, state.version, state.env)))
+        .body(Full::from(format!(
+            r#"{{"version":"{0}","env":"{1:?}"}}"#,
+            state.version, state.env
+        )))
         .unwrap()
 }
 
 /// Healthcheck handler
 ///
 /// This implementation demonstrates how to build a JSON response with Json.
-/// For more details see https://docs.rs/axum/0.6.0-rc.2/axum/struct.Json.html
-pub async fn healthcheck_handler_3(State(state): State<Arc<AppState>>) -> Json<Value> {
+/// For more details see https://docs.rs/axum/0.6.0-rc.4/axum/struct.Json.html
+pub async fn healthcheck_handler_3(State(state): State<Arc<AppConfiguration>>) -> Json<Value> {
     let value = json!({
         "version": state.version,
         "env": format!("{:?}", state.env),
@@ -54,23 +72,23 @@ pub async fn healthcheck_handler_3(State(state): State<Arc<AppState>>) -> Json<V
 
 #[derive(Serialize)]
 pub struct HealthcheckResponseDto {
-    version: &'static str,
+    version: String,
     env: Environment,
 }
 
 /// Healthcheck handler
 ///
-/// This implementation demonstrates how to build a JSON response with serde::Serialize.
-/// For more details see https://docs.rs/axum/0.6.0-rc.2/axum/struct.Json.html
-pub async fn healthcheck_handler_4(State(state): State<Arc<AppState>>) -> Json<HealthcheckResponseDto> {
+/// This implementation demonstrates how to build a JSON response with Axum's Json responder.
+/// For more details see https://docs.rs/axum/0.6.0-rc.4/axum/struct.Json.html
+pub async fn healthcheck_handler_4(State(state): State<Arc<AppConfiguration>>) -> Json<HealthcheckResponseDto> {
     Json(HealthcheckResponseDto {
-        version: state.version,
+        version: state.version.to_string(),
         env: state.env.clone(),
     })
 }
 
-pub async fn failing_healthcheck_1() -> crate::Result<()> {
-    Err(crate::Error::Anyhow(anyhow::anyhow!("Something bad happened")))
+pub async fn failing_healthcheck_1() -> error::Result<()> {
+    Err(error::Error::Anyhow(anyhow::anyhow!("Something bad happened")))
 }
 
 pub async fn failing_healthcheck_2() -> Infallible {
@@ -79,27 +97,82 @@ pub async fn failing_healthcheck_2() -> Infallible {
 
 #[cfg(test)]
 mod tests {
+    use std::net::{SocketAddr, TcpListener};
+
     use super::*;
     use axum::http::Request;
+    use rstest::rstest;
     use tower::ServiceExt;
 
+    #[rstest]
+    #[case("/health_1")]
+    #[case("/health_2")]
+    #[case("/health_3")]
+    #[case("/health_4")]
     #[tokio::test]
-    async fn hello_world() {
-        let app = healthcheck_routes(Arc::new(AppState{env: Environment::Development, version: "1.0.0"})).into_service();
+    async fn healthchecks(#[case] uri: &str) {
+        let app = healthcheck_routes(Arc::new(AppConfiguration {
+            env: Environment::Development,
+            version: "1.0.0",
+        }))
+        .into_service();
 
         // `Router` implements `tower::Service<Request<Body>>` so we can
         // call it like any tower service, no need to run an HTTP server.
         let response = app
-            .oneshot(Request::builder().uri("/health_1").body(Body::empty()).unwrap())
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let v: serde_json::Value = serde_json::from_str(String::from_utf8(body.to_vec()).unwrap().as_str()).unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(v.get("version").unwrap(), "1.0.0");
-        assert_eq!(*v.get("env").unwrap(), serde_json::to_value(Environment::Development).unwrap());
+        assert_eq!(body, json!({ "version": "1.0.0", "env": "Development" }));
+    }
+
+    #[rstest]
+    #[case("/health_1")]
+    #[case("/health_2")]
+    #[case("/health_3")]
+    #[case("/health_4")]
+    #[tokio::test]
+    async fn healthchecks_real(#[case] url: &str) {
+        let listener = TcpListener::bind("0.0.0.0:0".parse::<SocketAddr>().unwrap()).unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let app = healthcheck_routes(Arc::new(AppConfiguration {
+            env: Environment::Development,
+            version: "1.0.0",
+        }))
+        .into_make_service();
+
+        tokio::spawn(async move {
+            axum::Server::from_tcp(listener)
+                .unwrap()
+                .serve(app)
+                .await
+                .unwrap();
+        });
+
+        let client = hyper::Client::new();
+
+        let response = client
+            .request(
+                Request::builder()
+                    .uri(format!("http://{addr}{url}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body, json!({ "version": "1.0.0", "env": "Development" }));
     }
 }
