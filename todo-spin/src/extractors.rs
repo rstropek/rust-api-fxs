@@ -1,3 +1,4 @@
+use base64::{Engine, engine::general_purpose};
 use regex::Regex;
 use spin_sdk::{
     http::Request,
@@ -11,14 +12,14 @@ pub fn extract_db(req: &Request) -> TodoStore {
         .headers()
         .get_all("cookie")
         .into_iter()
-        .find(|c| c.to_str().unwrap().starts_with("Session="))
+        .find(|c| c.to_str().unwrap().starts_with("db="))
     {
         let db = db.to_str().unwrap();
-        let re = Regex::new(r"; db=([a-zA-Z0-9]+)").unwrap();
+        let re = Regex::new(r"db=([a-zA-Z0-9]+)").unwrap();
         let mut cap = re.captures_iter(db);
         if let Some(re) = cap.next() {
             let re = &re[1];
-            let db = base64::decode(re).unwrap();
+            let db = general_purpose::STANDARD_NO_PAD.decode(re).unwrap();
             return TodoStore::from_hashmap(serde_json::from_str(std::str::from_utf8(&db).unwrap()).unwrap());
         }
     }

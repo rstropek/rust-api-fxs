@@ -8,7 +8,6 @@ use crate::{
     model::{Hero, IdentifyableHero}, error,
 };
 use axum::{
-    body::Body,
     extract::{Query, State},
     http::{header::LOCATION, HeaderMap, StatusCode},
     response::IntoResponse,
@@ -26,10 +25,11 @@ use validator::Validate;
 pub type DynHeroesRepository = Arc<dyn HeroesRepositoryTrait + Send + Sync>;
 
 /// Setup hero management API routes
-pub fn heroes_routes(repo: DynHeroesRepository) -> Router<DynHeroesRepository, Body> {
-    Router::with_state(repo)
+pub fn heroes_routes(repo: DynHeroesRepository) -> Router {
+    Router::new()
         .route("/", post(insert_hero).get(get_heroes))
         .route("/cleanup", post(cleanup_heroes))
+        .with_state(repo)
 }
 
 #[derive(Deserialize)]
@@ -88,6 +88,7 @@ mod tests {
 
     use super::*;
     use axum::http::Request;
+    use hyper::Body;
     use mockall::predicate::*;
     use rstest::rstest;
     use serde_json::Value;
@@ -104,13 +105,13 @@ mod tests {
 
         let repo = Arc::new(repo_mock) as DynHeroesRepository;
 
-        let app = heroes_routes(repo).into_service();
+        let app = heroes_routes(repo);//.into_service();
         let response = app
             .oneshot(
                 Request::builder()
                     .uri("/cleanup")
                     .method("POST")
-                    .body(Body::empty())
+                    .body(hyper::Body::empty())
                     .unwrap(),
             )
             .await
@@ -128,7 +129,7 @@ mod tests {
 
         let repo = Arc::new(repo_mock) as DynHeroesRepository;
 
-        let app = heroes_routes(repo).into_service();
+        let app = heroes_routes(repo);//.into_service();
         let response = app
             .oneshot(
                 Request::builder()

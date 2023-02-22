@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use base64::{engine::general_purpose, Engine};
 use http::StatusCode;
 use serde::Serialize;
 use spin_sdk::http::Response;
@@ -23,7 +24,7 @@ where
 
     if let Some(todos) = todos {
         let db = serde_json::to_string(&Into::<HashMap<usize, IdentifyableTodoItem>>::into(todos))?;
-        let db = format!("db={}", base64::encode(db));
+        let db = format!("db={}", general_purpose::STANDARD_NO_PAD.encode(db));
         builder = builder.header("Set-Cookie", format!("{}; SameSite=Strict; Path=/", db));
     }
 

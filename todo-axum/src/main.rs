@@ -35,11 +35,12 @@ async fn main() {
     // We register our shared state so that handlers can get it using the State extractor.
     // Note that this will change in Axum 0.6. See more at
     // https://docs.rs/axum/0.6.0-rc.4/axum/index.html#sharing-state-with-handlers
-    let app = Router::with_state(db)
+    let app = Router::new()
         // Here we setup the routes. Note: No macros
         .route("/todos", get(get_todos).post(add_todo))
         .route("/todos/:id", delete(delete_todo).patch(update_todo).get(get_todo))
         .route("/todos/persist", post(persist))
+        .with_state(db)
         // Using tower to add tracing layer
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()).into_inner());
 

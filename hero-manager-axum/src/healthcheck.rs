@@ -6,7 +6,7 @@
 /// principles about testing handlers.
 
 use axum::{
-    body::{Body, Bytes, Full},
+    body::{Bytes, Full},
     extract::State,
     http::{header, StatusCode},
     response::{IntoResponse, Response},
@@ -20,15 +20,16 @@ use std::{convert::Infallible, sync::Arc};
 use crate::{AppConfiguration, Environment, error};
 
 /// Setup healthcheck API routes
-pub fn healthcheck_routes(shared_state: Arc<AppConfiguration>) -> Router<Arc<AppConfiguration>, Body> {
+pub fn healthcheck_routes(shared_state: Arc<AppConfiguration>) -> Router {
     // Note that we are using the new state sharing API of the latest RC of Axum here.
-    Router::with_state(shared_state)
+    Router::new()
         .route("/health_1", get(healthcheck_handler_1))
         .route("/health_2", get(healthcheck_handler_2))
         .route("/health_3", get(healthcheck_handler_3))
         .route("/health_4", get(healthcheck_handler_4))
         .route("/health_failing_1", get(failing_healthcheck_1))
         .route("/health_failing_2", get(failing_healthcheck_2))
+        .with_state(shared_state)
 }
 
 /// Healthcheck handler
@@ -115,12 +116,12 @@ mod tests {
             env: Environment::Development,
             version: "1.0.0",
         }))
-        .into_service();
+        ;//.into_make_service();
 
         // `Router` implements `tower::Service<Request<Body>>` so we can
         // call it like any tower service, no need to run an HTTP server.
         let response = app
-            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .oneshot(Request::builder().uri(uri).body(hyper::Body::empty()).unwrap())
             .await
             .unwrap();
 
@@ -162,7 +163,7 @@ mod tests {
             .request(
                 Request::builder()
                     .uri(format!("http://{addr}{url}"))
-                    .body(Body::empty())
+                    .body(hyper::Body::empty())
                     .unwrap(),
             )
             .await
