@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This repository contains the sample code for Rainer Stropek's talk at *Eurorust 2022*. The accompanying slides can be found [here](https://slides.com/rainerstropek/rust-api-fxs/fullscreen).
+This repository contains the sample code for Rainer Stropek's talk at *Eurorust 2022*. They have been updated for Rainer's talk at the BASTA conference in Frankfurt in 2023. The accompanying slides can be found [here](https://slides.com/rainerstropek/rust-api-fxs/fullscreen).
 
 ## Abstract
 
