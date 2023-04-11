@@ -4,26 +4,26 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.6.0-rc.4"
-clap = { version = "4.0.22", features = ["derive", "cargo", "env"] }
-tokio = { version = "1.0", features = ["full"] }
+axum = "0.6"
+clap = { version = "4.1", features = ["derive", "cargo", "env"] }
+tokio = { version = "1.26", features = ["full"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "postgres", "chrono" ] }
 chrono = { version = "0.4", features = [ "serde" ] }
 anyhow = "1.0"
-http-api-problem = { version = "0.55", features = [ "axum" ] }
+http-api-problem = { version = "0.56", features = [ "axum" ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower = "0.4"
-tower-http = { version = "0.3.0", features = ["trace", "catch-panic"] }
-axum-macros = "0.2"
+tower-http = { version = "0.4", features = ["trace", "catch-panic"] }
+axum-macros = "0.3"
 validator = { version = "0.16", features = ["derive"] }
 thiserror = "1.0"
 mockall_double = "0.3"
 
 [dev-dependencies]
 mockall = "0.11"
-rstest = "0.15"
+rstest = "0.17"
 tower = { version = "0.4", features = ["util"] }
 hyper = { version = "0.14", features = ["full"] }
