@@ -10,12 +10,13 @@ use crate::{
 use axum::{
     extract::{Query, State},
     http::{header::LOCATION, HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::post,
     Json, Router,
 };
 use serde::Deserialize;
-use std::sync::Arc;
+use tokio::time::sleep;
+use std::{sync::Arc, time::Duration};
 use validator::Validate;
 
 /// Type alias for our shared state
@@ -29,6 +30,8 @@ pub fn heroes_routes(repo: DynHeroesRepository) -> Router {
     Router::new()
         .route("/", post(insert_hero).get(get_heroes))
         .route("/cleanup", post(cleanup_heroes))
+        .route("/slow", post(do_something_slow))
+        .route("/panic", post(panic))
         .with_state(repo)
 }
 
@@ -80,6 +83,16 @@ pub async fn insert_hero(
         }),
     )
         .into_response())
+}
+
+pub async fn do_something_slow() -> error::Result<impl IntoResponse> {
+    // Wait for 10 seconds
+    sleep(Duration::from_secs(10)).await;
+    Ok(StatusCode::OK)
+}
+
+pub async fn panic() -> error::Result<Response> {
+    panic!("Something very bad happened");
 }
 
 #[cfg(test)]

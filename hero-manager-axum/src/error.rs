@@ -55,7 +55,7 @@ pub fn handle_panic(err: Box<dyn Any + Send + 'static>) -> Response<Body> {
     }
 
     Response::builder()
-        .status(StatusCode::OK)
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_string(&problem).unwrap()))
         .unwrap()

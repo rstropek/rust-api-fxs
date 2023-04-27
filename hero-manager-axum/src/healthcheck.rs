@@ -115,8 +115,7 @@ mod tests {
         let app = healthcheck_routes(Arc::new(AppConfiguration {
             env: Environment::Development,
             version: "1.0.0",
-        }))
-        ;//.into_make_service();
+        }));
 
         // `Router` implements `tower::Service<Request<Body>>` so we can
         // call it like any tower service, no need to run an HTTP server.

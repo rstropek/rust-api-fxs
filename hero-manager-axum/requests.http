@@ -23,7 +23,7 @@ POST http://localhost:4000/heroes
 Content-Type: application/json
 
 {
-    "name": "Superman21",
+    "name": "Superman2111",
     "firstSeen": "1935-01-01T00:00:00Z",
     "canFly": true,
     "realname": "Clark Kent",
@@ -32,3 +32,9 @@ Content-Type: application/json
 
 ###
 POST http://localhost:4000/heroes/cleanup
+
+###
+POST http://localhost:4000/heroes/slow
+
+###
+POST http://localhost:4000/heroes/panic

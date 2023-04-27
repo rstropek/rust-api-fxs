@@ -15,7 +15,7 @@ anyhow = "1.0"
 http-api-problem = { version = "0.56", features = [ "axum" ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tower = "0.4"
+tower = { version = "0.4", features = ["timeout"] }
 tower-http = { version = "0.4", features = ["trace", "catch-panic"] }
 axum-macros = "0.3"
 validator = { version = "0.16", features = ["derive"] }

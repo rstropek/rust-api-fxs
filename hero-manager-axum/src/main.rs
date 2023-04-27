@@ -1,9 +1,9 @@
 use crate::{data::HeroesRepository, heroes::DynHeroesRepository, model::AppConfiguration};
-use axum::Router;
+use axum::{error_handling::HandleErrorLayer, http, BoxError, Router};
 use clap::{crate_version, Parser};
 use model::Environment;
 use sqlx::postgres::PgPoolOptions;
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::signal;
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, trace::TraceLayer};
@@ -66,8 +66,11 @@ async fn main() {
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
-                .layer(CatchPanicLayer::custom(error::handle_panic))
-                .into_inner(),
+                .layer(HandleErrorLayer::new(|_: BoxError| async {
+                    http::StatusCode::REQUEST_TIMEOUT
+                }))
+                .timeout(Duration::from_secs(2))
+                .layer(CatchPanicLayer::custom(error::handle_panic)),
         );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cli.port));
