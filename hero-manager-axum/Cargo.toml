@@ -9,10 +9,10 @@ clap = { version = "4.1", features = ["derive", "cargo", "env"] }
 tokio = { version = "1.26", features = ["full"] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls" , "postgres", "chrono" ] }
+sqlx = { version = "0.7", features = [ "runtime-tokio-native-tls" , "postgres", "chrono" ] }
 chrono = { version = "0.4", features = [ "serde" ] }
 anyhow = "1.0"
-http-api-problem = { version = "0.56", features = [ "axum" ] }
+http-api-problem = { version = "0.57", features = [ "axum" ] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower = { version = "0.4", features = ["timeout"] }
@@ -24,6 +24,6 @@ mockall_double = "0.3"
 
 [dev-dependencies]
 mockall = "0.11"
-rstest = "0.17"
+rstest = "0.18"
 tower = { version = "0.4", features = ["util"] }
 hyper = { version = "0.14", features = ["full"] }

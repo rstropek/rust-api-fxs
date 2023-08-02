@@ -42,7 +42,7 @@ async fn main() {
         .route("/todos/persist", post(persist))
         .with_state(db)
         // Using tower to add tracing layer
-        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()).into_inner());
+        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
     // In practice: Use graceful shutdown.
     // Note that Axum has great examples for a log of practical scenarios,

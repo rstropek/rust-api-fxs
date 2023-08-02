@@ -12,7 +12,7 @@ use crate::model::{Hero, IdentifyableHero};
 use axum::async_trait;
 #[cfg(test)]
 use mockall::automock;
-use sqlx::{pool::PoolConnection, PgPool, Postgres};
+use sqlx::PgPool;
 use tracing::error;
 
 /// Represents primary key and version data for a hero
@@ -20,9 +20,6 @@ pub struct HeroPkVersion {
     pub id: i64,
     pub version: i32,
 }
-
-/// Type alias for a pooled connection to Postres
-type DatabaseConnection = PoolConnection<Postgres>;
 
 /// Logs an sqlx error
 pub fn log_error(e: sqlx::Error) -> sqlx::Error {
@@ -47,31 +44,21 @@ pub trait HeroesRepositoryTrait {
 /// Implementation of the heroes repository
 pub struct HeroesRepository(pub PgPool);
 
-impl HeroesRepository {
-    /// Helper functions for getting a connection for the DB pool
-    async fn get_connection(&self) -> Result<DatabaseConnection, sqlx::error::Error> {
-        self.0.acquire().await.map_err(log_error)
-    }
-}
-
 #[async_trait]
 impl HeroesRepositoryTrait for HeroesRepository {
     async fn cleanup(&self) -> Result<(), sqlx::error::Error> {
-        let mut conn = self.get_connection().await?;
-        sqlx::query("DELETE FROM heroes").execute(&mut conn).await?;
+        sqlx::query("DELETE FROM heroes").execute(&self.0).await?;
         Ok(())
     }
 
     async fn get_by_name(&self, name: &str) -> Result<Vec<IdentifyableHero>, sqlx::error::Error> {
-        let mut conn = self.get_connection().await?;
         sqlx::query_as::<_, IdentifyableHero>("SELECT * FROM heroes WHERE name LIKE $1")
             .bind(name)
-            .fetch_all(&mut conn)
+            .fetch_all(&self.0)
             .await
     }
 
     async fn insert(&self, hero: &Hero) -> Result<HeroPkVersion, sqlx::error::Error> {
-        let mut conn = self.get_connection().await?;
         let pk: (i64, i32) = sqlx::query_as(
             r#"
             INSERT INTO heroes (first_seen, name, can_fly, realname, abilities)
@@ -83,7 +70,7 @@ impl HeroesRepositoryTrait for HeroesRepository {
         .bind(hero.can_fly)
         .bind(&hero.realname)
         .bind(&hero.abilities)
-        .fetch_one(&mut conn)
+        .fetch_one(&self.0)
         .await?;
         Ok(HeroPkVersion {
             id: pk.0,
