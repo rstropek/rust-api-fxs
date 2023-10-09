@@ -1,11 +1,14 @@
-GET http://localhost:3000/todos
+@host=http://localhost:8080
 
 ###
-GET http://localhost:3000/todos?offset=1&limit=2
+GET {{host}}/todos
+
+###
+GET {{host}}/todos?offset=1&limit=2
 
 ###
 # @name newTodo
-POST http://localhost:3000/todos
+POST {{host}}/todos
 Content-Type: application/json
 
 {
@@ -17,11 +20,11 @@ Content-Type: application/json
 
 ###
 @addedTodoId={{newTodo.response.body.$.id}}
-GET http://localhost:3000/todos/{{addedTodoId}}
+GET {{host}}/todos/{{addedTodoId}}
 
 ###
 @addedTodoId={{newTodo.response.body.$.id}}
-PATCH http://localhost:3000/todos/{{addedTodoId}}
+PATCH {{host}}/todos/{{addedTodoId}}
 Content-Type: application/json
 
 {
@@ -30,7 +33,7 @@ Content-Type: application/json
 
 ###
 @addedTodoId={{newTodo.response.body.$.id}}
-DELETE http://localhost:3000/todos/{{addedTodoId}}
+DELETE {{host}}/todos/{{addedTodoId}}
 
 ###
-POST http://localhost:3000/todos/persist
+POST {{host}}/todos/persist
