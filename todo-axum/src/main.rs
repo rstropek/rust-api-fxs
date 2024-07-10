@@ -1,15 +1,14 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
     routing::{delete, get, post},
     Json, Router,
 };
 use serde_json::json;
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use todo_logic::{Pagination, TodoItem, TodoStore, TodoStoreError, UpdateTodoItem};
-use tokio::sync::RwLock;
-use tower::ServiceBuilder;
+use tokio::{net::TcpListener, sync::RwLock};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -23,9 +22,10 @@ type Db = Arc<RwLock<TodoStore>>;
 async fn main() {
     // Enable tracing using Tokio's https://tokio.rs/#tk-lib-tracing
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "todo_axum=debug,tower_http=debug".into()),
-        ))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "todo_axum=debug,tower_http=debug".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -37,19 +37,25 @@ async fn main() {
     // https://docs.rs/axum/0.6.0-rc.4/axum/index.html#sharing-state-with-handlers
     let app = Router::new()
         // Here we setup the routes. Note: No macros
+        .route("/", get(say_hello))
         .route("/todos", get(get_todos).post(add_todo))
         .route("/todos/:id", delete(delete_todo).patch(update_todo).get(get_todo))
         .route("/todos/persist", post(persist))
         .with_state(db)
         // Using tower to add tracing layer
-        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
+        .layer(TraceLayer::new_for_http());
 
     // In practice: Use graceful shutdown.
     // Note that Axum has great examples for a log of practical scenarios,
     // including graceful shutdown (https://github.com/tokio-rs/axum/tree/main/examples)
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    println!("listening on {}", addr);
-    axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap();
+    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    axum::serve(listener, app).await.unwrap();
+}
+
+/// Say hello
+async fn say_hello() -> Html<&'static str> {
+    Html("<h1>Hello, World!</h1>")
 }
 
 /// Get list of todo items
