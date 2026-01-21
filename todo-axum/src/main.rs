@@ -39,7 +39,7 @@ async fn main() {
         // Here we setup the routes. Note: No macros
         .route("/", get(say_hello))
         .route("/todos", get(get_todos).post(add_todo))
-        .route("/todos/:id", delete(delete_todo).patch(update_todo).get(get_todo))
+        .route("/todos/{id}", delete(delete_todo).patch(update_todo).get(get_todo))
         .route("/todos/persist", post(persist))
         .with_state(db)
         // Using tower to add tracing layer
@@ -64,9 +64,9 @@ async fn say_hello() -> Html<&'static str> {
 /// extractor is used to get the database (changes in Axum 0.6 RC).
 /// Extractors are technically types that implement FromRequest. You can create
 /// your own extractors or use the ones provided by Axum.
-async fn get_todos(pagination: Option<Query<Pagination>>, State(db): State<Db>) -> impl IntoResponse {
+async fn get_todos(pagination: Query<Pagination>, State(db): State<Db>) -> impl IntoResponse {
     let todos = db.read().await;
-    let Query(pagination) = pagination.unwrap_or_default();
+    let Query(pagination) = pagination;
     // Json is an extractor and a response.
     Json(todos.get_todos(pagination))
 }
