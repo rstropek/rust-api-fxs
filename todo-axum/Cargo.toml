@@ -1,17 +1,18 @@
 [package]
 name = "todo-axum"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lints]
+workspace = true
 
 [dependencies]
-axum = "0.8"
-tokio = { version = "1.0", features = ["full"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tower = { version = "0.5", features = ["util", "timeout"] }
-tower-http = { version = "0.6", features = ["add-extension", "trace"] }
-serde_json = "1"
-todo-logic ={ path = "../todo-logic" }
-regex = { version = "1", features = ["unicode-case"] }
+axum.workspace = true
+serde_json.workspace = true
+todo-logic.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tower-http = { workspace = true, features = ["trace"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true

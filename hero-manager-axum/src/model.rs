@@ -1,14 +1,14 @@
-// Model for our sample
-//
-// We are maintaining a list of heroes. In this sample, we use identical model classes
-// for web API and database access layer. This is for brevity. In more complicated projects,
-// you will probably have different models for DB and web API.
-//
-// Nevertheless, the model has been chosen to demonstrate some interesting aspects:
-// * Storing vectors in Postgres (abilities)
-// * Customizing serde for properties (abilities)
-// * Various serde macros (e.g. camelCase, flatten)
-// * Auto-mapping DB columns to fiels (FromRow)
+//! Model for our sample
+//!
+//! We are maintaining a list of heroes. In this sample, we use identical model classes
+//! for web API and database access layer. This is for brevity. In more complicated projects,
+//! you will probably have different models for DB and web API.
+//!
+//! Nevertheless, the model has been chosen to demonstrate some interesting aspects:
+//! * Storing vectors in Postgres (abilities)
+//! * Customizing serde for properties (abilities)
+//! * Various serde macros (e.g. camelCase, flatten)
+//! * Auto-mapping DB columns to fields (FromRow)
 
 use chrono::{DateTime, Utc};
 use clap::ValueEnum;
@@ -27,13 +27,12 @@ pub enum Environment {
 #[derive(Clone)]
 pub struct AppConfiguration {
     pub version: &'static str,
-    pub env: Environment
+    pub env: Environment,
 }
 
 /// Represents a hero
-#[derive(Serialize, Deserialize, Validate, Clone)]
+#[derive(Serialize, Deserialize, Validate, Clone, FromRow, Default)]
 #[serde(rename_all = "camelCase")]
-#[derive(FromRow, Default)]
 pub struct Hero {
     pub first_seen: DateTime<Utc>,
     pub name: String,
@@ -44,15 +43,15 @@ pub struct Hero {
         serialize_with = "serialize_abilities",
         default
     )]
-    #[validate(length(max = 5))]
+    // The database requires between one and five abilities (see migrations)
+    #[validate(required, length(min = 1, max = 5))]
     pub abilities: Option<Vec<String>>,
 }
 
 /// Represents a hero with primary key and version
-#[derive(Serialize)]
+#[derive(Serialize, FromRow, Default)]
 #[serde(rename_all = "camelCase")]
-#[derive(FromRow, Default)]
-pub struct IdentifyableHero {
+pub struct IdentifiableHero {
     pub id: i64,
     #[serde(flatten)]
     #[sqlx(flatten)]
@@ -66,10 +65,7 @@ where
     D: Deserializer<'de>,
 {
     let concat_abilities = Option::<String>::deserialize(deserializer)?;
-    match concat_abilities {
-        Some(abilities) => Ok(Some(abilities.split(',').map(|s| s.trim().to_string()).collect())),
-        None => Ok(None),
-    }
+    Ok(concat_abilities.map(|abilities| abilities.split(',').map(|s| s.trim().to_string()).collect()))
 }
 
 /// Serialize vector of abilities into comma-separated string
@@ -78,8 +74,8 @@ where
     S: Serializer,
 {
     match x {
-        Some(abilities) => serde::Serialize::serialize(&abilities.join(", "), serializer),
-        None => serde::Serialize::serialize(&Option::<Vec<String>>::None, serializer),
+        Some(abilities) => serializer.serialize_str(&abilities.join(", ")),
+        None => serializer.serialize_none(),
     }
 }
 

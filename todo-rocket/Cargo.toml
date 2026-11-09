@@ -1,10 +1,15 @@
 [package]
 name = "todo-rocket"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
 
 [dependencies]
-rocket = { version = "0.5.0-rc.2", features = [ "json" ] }
-todo-logic ={ path = "../todo-logic" }
-log = "0.4"
-simplelog= "0"
+rocket.workspace = true
+todo-logic.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

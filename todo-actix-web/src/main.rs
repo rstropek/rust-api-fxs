@@ -1,27 +1,34 @@
 use actix_web::{
-    delete, get,
+    App, Either, HttpResponse, HttpServer, Responder, ResponseError, delete, get,
     http::StatusCode,
     middleware::Logger,
     patch, post, web,
     web::{Data, Json, Path, Query},
-    App, Either, HttpResponse, HttpServer, Responder, ResponseError,
 };
-use log::debug;
-use simplelog::{Config, LevelFilter, SimpleLogger};
-use std::{fmt::Display, sync::Arc};
-use todo_logic::{IdentifyableTodoItem, Pagination, TodoItem, TodoStore, TodoStoreError, UpdateTodoItem};
+use std::fmt::{self, Display};
+use todo_logic::{IdentifiableTodoItem, Pagination, TodoItem, TodoStore, TodoStoreError, UpdateTodoItem};
 use tokio::sync::RwLock;
+use tracing::debug;
+use tracing_subscriber::EnvFilter;
 
 /// Type for our shared state
-type Db = Arc<RwLock<TodoStore>>;
+///
+/// Note that we do not need an additional Arc here because Actix's Data
+/// is already reference-counted.
+type Db = RwLock<TodoStore>;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Initialize logging.
-    // Actix's Logger middleware (https://actix.rs/actix-web/actix_web/middleware/struct.Logger.html)
-    // uses the log crate (https://crates.io/crates/log) to log requests. You can use any
-    // compatible logger, but for this example we'll use simplelog.
-    SimpleLogger::init(LevelFilter::Debug, Config::default()).unwrap();
+    // Initialize logging. Actix's Logger middleware
+    // (https://docs.rs/actix-web/latest/actix_web/middleware/struct.Logger.html) emits its
+    // messages with the log crate. tracing-subscriber forwards them to tracing, so we get
+    // them together with our own events. Use the RUST_LOG environment variable to override
+    // the filter.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| "todo_actix_web=debug,actix_web=info".into()),
+        )
+        .init();
 
     // Create shared data store
     let state = Data::new(Db::default());
@@ -56,19 +63,18 @@ async fn main() -> std::io::Result<()> {
 /// and the shared state. More about extractors at
 /// https://actix.rs/docs/extractors/.
 ///
-/// Also note the Responder trait (https://actix.rs/docs/extractors/).
+/// Also note the Responder trait (https://actix.rs/docs/handlers/).
 /// Actix comes with a lot of built-in responders, but you can also
 /// implement your own.
 #[get("/todos")]
-async fn get_todos(pagination: Query<Pagination>, db: Data<Db>) -> impl Responder {
+async fn get_todos(Query(pagination): Query<Pagination>, db: Data<Db>) -> impl Responder {
     let todos = db.read().await;
-    let Query(pagination) = pagination;
     Json(todos.get_todos(pagination))
 }
 
 /// If a method returns different return types, Actix offers
 /// the Either enum (https://actix.rs/docs/handlers/).
-type ItemOrStatus = Either<Json<IdentifyableTodoItem>, HttpResponse>;
+type ItemOrStatus = Either<Json<IdentifiableTodoItem>, HttpResponse>;
 
 /// Get a single todo item
 async fn get_todo(id: Path<usize>, db: Data<Db>) -> ItemOrStatus {
@@ -86,9 +92,9 @@ async fn get_todo(id: Path<usize>, db: Data<Db>) -> ItemOrStatus {
 ///
 /// Note the use of the Json extractor to extract the body.
 #[post("/todos")]
-async fn add_todo(db: Data<Db>, todo: Json<TodoItem>) -> impl Responder {
+async fn add_todo(db: Data<Db>, Json(todo): Json<TodoItem>) -> impl Responder {
     let mut todos = db.write().await;
-    let todo = todos.add_todo(todo.clone());
+    let todo = todos.add_todo(todo);
     HttpResponse::Created().json(todo)
 }
 
@@ -105,10 +111,9 @@ async fn delete_todo(id: Path<usize>, db: Data<Db>) -> impl Responder {
 
 /// Update a todo item
 #[patch("/todos/{id}")]
-async fn update_todo(id: Path<usize>, db: Data<Db>, input: Json<UpdateTodoItem>) -> ItemOrStatus {
+async fn update_todo(id: Path<usize>, db: Data<Db>, Json(input): Json<UpdateTodoItem>) -> ItemOrStatus {
     let mut todos = db.write().await;
-    let res = todos.update_todo(&id, input.into_inner());
-    match res {
+    match todos.update_todo(*id, input) {
         Some(todo) => Either::Left(Json(todo.clone())),
         None => Either::Right(HttpResponse::NotFound().finish()),
     }
@@ -120,6 +125,7 @@ enum AppError {
     TodoStore(TodoStoreError),
     // In practice, we would have more error types here.
 }
+
 impl From<TodoStoreError> for AppError {
     fn from(inner: TodoStoreError) -> Self {
         AppError::TodoStore(inner)
@@ -127,7 +133,7 @@ impl From<TodoStoreError> for AppError {
 }
 
 impl Display for AppError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AppError::TodoStore(e) => write!(f, "Todo store related error: {e}"),
             // In practice, we would have more error types here.
@@ -139,16 +145,14 @@ impl Display for AppError {
 ///
 /// More about error handling at https://actix.rs/docs/errors/.
 impl ResponseError for AppError {
-    fn status_code(&self) -> actix_web::http::StatusCode {
+    fn status_code(&self) -> StatusCode {
         StatusCode::INTERNAL_SERVER_ERROR
     }
 
-    fn error_response(&self) -> HttpResponse<actix_web::body::BoxBody> {
+    fn error_response(&self) -> HttpResponse {
         HttpResponse::build(self.status_code()).json(match self {
-            AppError::TodoStore(e) => match e {
-                TodoStoreError::FileAccessError(_) => "Error while writing to file",
-                TodoStoreError::SerializationError(_) => "Error during serialization",
-            },
+            AppError::TodoStore(TodoStoreError::FileAccess(_)) => "Error while writing to file",
+            AppError::TodoStore(TodoStoreError::Serialization(_)) => "Error during serialization",
         })
     }
 }

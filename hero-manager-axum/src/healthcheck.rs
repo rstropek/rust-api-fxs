@@ -1,27 +1,29 @@
-/// Healtheck routes and handlers
-///
-/// This part of the sample demonstrates various ways for how to
-/// build web responses based on a healthcheck endpoint.
-/// We also use the healthcheck endpoints to demonstrate some
-/// principles about testing handlers.
+//! Healthcheck routes and handlers
+//!
+//! This part of the sample demonstrates various ways for how to
+//! build web responses based on a healthcheck endpoint.
+//! We also use the healthcheck endpoints to demonstrate some
+//! principles about testing handlers.
 
 use axum::{
-    body::{Bytes, Full},
+    Json, Router,
+    body::Body,
     extract::State,
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::get,
-    Json, Router,
 };
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{convert::Infallible, sync::Arc};
 
-use crate::{AppConfiguration, Environment, error};
+use crate::{
+    error,
+    model::{AppConfiguration, Environment},
+};
 
 /// Setup healthcheck API routes
 pub fn healthcheck_routes(shared_state: Arc<AppConfiguration>) -> Router {
-    // Note that we are using the new state sharing API of the latest RC of Axum here.
     Router::new()
         .route("/health_1", get(healthcheck_handler_1))
         .route("/health_2", get(healthcheck_handler_2))
@@ -35,7 +37,7 @@ pub fn healthcheck_routes(shared_state: Arc<AppConfiguration>) -> Router {
 /// Healthcheck handler
 ///
 /// This implementation demonstrates how to manually build a response.
-/// For more details see https://docs.rs/axum/0.6.0-rc.4/axum/response/index.html#building-responses
+/// For more details see https://docs.rs/axum/latest/axum/response/index.html#building-responses
 pub async fn healthcheck_handler_1(State(state): State<Arc<AppConfiguration>>) -> impl IntoResponse {
     (
         StatusCode::OK,
@@ -47,12 +49,12 @@ pub async fn healthcheck_handler_1(State(state): State<Arc<AppConfiguration>>) -
 /// Healthcheck handler
 ///
 /// This implementation demonstrates how to build a response with low-level builder.
-/// For more details see https://docs.rs/axum/0.6.0-rc.4/axum/response/index.html#building-responses
-pub async fn healthcheck_handler_2(State(state): State<Arc<AppConfiguration>>) -> Response<Full<Bytes>> {
+/// For more details see https://docs.rs/axum/latest/axum/response/index.html#building-responses
+pub async fn healthcheck_handler_2(State(state): State<Arc<AppConfiguration>>) -> Response {
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Full::from(format!(
+        .body(Body::from(format!(
             r#"{{"version":"{0}","env":"{1:?}"}}"#,
             state.version, state.env
         )))
@@ -62,7 +64,7 @@ pub async fn healthcheck_handler_2(State(state): State<Arc<AppConfiguration>>) -
 /// Healthcheck handler
 ///
 /// This implementation demonstrates how to build a JSON response with Json.
-/// For more details see https://docs.rs/axum/0.6.0-rc.4/axum/struct.Json.html
+/// For more details see https://docs.rs/axum/latest/axum/struct.Json.html
 pub async fn healthcheck_handler_3(State(state): State<Arc<AppConfiguration>>) -> Json<Value> {
     let value = json!({
         "version": state.version,
@@ -80,7 +82,7 @@ pub struct HealthcheckResponseDto {
 /// Healthcheck handler
 ///
 /// This implementation demonstrates how to build a JSON response with Axum's Json responder.
-/// For more details see https://docs.rs/axum/0.6.0-rc.4/axum/struct.Json.html
+/// For more details see https://docs.rs/axum/latest/axum/struct.Json.html
 pub async fn healthcheck_handler_4(State(state): State<Arc<AppConfiguration>>) -> Json<HealthcheckResponseDto> {
     Json(HealthcheckResponseDto {
         version: state.version.to_string(),
@@ -98,12 +100,19 @@ pub async fn failing_healthcheck_2() -> Infallible {
 
 #[cfg(test)]
 mod tests {
-    use std::net::{SocketAddr, TcpListener};
-
     use super::*;
-    use axum::http::Request;
+    use axum::{body::to_bytes, http::Request};
+    use hyper_util::{client::legacy::Client, rt::TokioExecutor};
     use rstest::rstest;
+    use tokio::net::TcpListener;
     use tower::ServiceExt;
+
+    fn test_app() -> Router {
+        healthcheck_routes(Arc::new(AppConfiguration {
+            env: Environment::Development,
+            version: "1.0.0",
+        }))
+    }
 
     #[rstest]
     #[case("/health_1")]
@@ -112,21 +121,16 @@ mod tests {
     #[case("/health_4")]
     #[tokio::test]
     async fn healthchecks(#[case] uri: &str) {
-        let app = healthcheck_routes(Arc::new(AppConfiguration {
-            env: Environment::Development,
-            version: "1.0.0",
-        }));
-
         // `Router` implements `tower::Service<Request<Body>>` so we can
         // call it like any tower service, no need to run an HTTP server.
-        let response = app
-            .oneshot(Request::builder().uri(uri).body(hyper::Body::empty()).unwrap())
+        let response = test_app()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(body, json!({ "version": "1.0.0", "env": "Development" }));
@@ -139,30 +143,20 @@ mod tests {
     #[case("/health_4")]
     #[tokio::test]
     async fn healthchecks_real(#[case] url: &str) {
-        let listener = TcpListener::bind("0.0.0.0:0".parse::<SocketAddr>().unwrap()).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let app = healthcheck_routes(Arc::new(AppConfiguration {
-            env: Environment::Development,
-            version: "1.0.0",
-        }))
-        .into_make_service();
-
         tokio::spawn(async move {
-            axum::Server::from_tcp(listener)
-                .unwrap()
-                .serve(app)
-                .await
-                .unwrap();
+            axum::serve(listener, test_app()).await.unwrap();
         });
 
-        let client = hyper::Client::new();
+        let client = Client::builder(TokioExecutor::new()).build_http::<Body>();
 
         let response = client
             .request(
                 Request::builder()
                     .uri(format!("http://{addr}{url}"))
-                    .body(hyper::Body::empty())
+                    .body(Body::empty())
                     .unwrap(),
             )
             .await
@@ -170,7 +164,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = to_bytes(Body::new(response.into_body()), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(body, json!({ "version": "1.0.0", "env": "Development" }));

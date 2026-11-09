@@ -1,22 +1,24 @@
-/// API handler for hero management
-///
-/// The most important aspect of this part of the sample is dependency
-/// injection with a trait. Our goal is to unit-test our handlers using
-/// mocked versions of our data access layer.
+//! API handler for hero management
+//!
+//! The most important aspect of this part of the sample is dependency
+//! injection with a trait. Our goal is to unit-test our handlers using
+//! mocked versions of our data access layer.
+
 use crate::{
-    data::{log_error, HeroesRepositoryTrait},
-    model::{Hero, IdentifyableHero}, error,
+    data::{HeroesRepositoryTrait, log_error},
+    error,
+    model::{Hero, IdentifiableHero},
 };
 use axum::{
+    Json, Router,
     extract::{Query, State},
-    http::{header::LOCATION, HeaderMap, StatusCode},
+    http::{StatusCode, header::LOCATION},
     response::{IntoResponse, Response},
     routing::post,
-    Json, Router,
 };
 use serde::Deserialize;
-use tokio::time::sleep;
 use std::{sync::Arc, time::Duration};
+use tokio::time::sleep;
 use validator::Validate;
 
 /// Type alias for our shared state
@@ -45,7 +47,7 @@ pub struct GetHeroFilter {
 pub async fn get_heroes(
     State(repo): State<DynHeroesRepository>,
     filter: Query<GetHeroFilter>,
-) -> error::Result<Json<Vec<IdentifyableHero>>> {
+) -> error::Result<Json<Vec<IdentifiableHero>>> {
     let heroes = repo
         .get_by_name(filter.name_filter.as_deref().unwrap_or("%"))
         .await
@@ -66,23 +68,15 @@ pub async fn insert_hero(
 
     let hero_pk = repo.insert(&hero).await.map_err(log_error)?;
 
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        LOCATION,
-        format!("/heroes/{}", hero_pk.id)
-            .parse()
-            .expect("Parsing location header should never fail"),
-    );
     Ok((
-        StatusCode::OK,
-        headers,
-        Json(IdentifyableHero {
+        StatusCode::CREATED,
+        [(LOCATION, format!("/heroes/{}", hero_pk.id))],
+        Json(IdentifiableHero {
             id: hero_pk.id,
             inner_hero: hero,
             version: hero_pk.version,
         }),
-    )
-        .into_response())
+    ))
 }
 
 pub async fn do_something_slow() -> error::Result<impl IntoResponse> {
@@ -100,8 +94,10 @@ mod tests {
     use crate::data::MockHeroesRepositoryTrait;
 
     use super::*;
-    use axum::http::Request;
-    use hyper::Body;
+    use axum::{
+        body::{Body, to_bytes},
+        http::Request,
+    };
     use mockall::predicate::*;
     use rstest::rstest;
     use serde_json::Value;
@@ -112,19 +108,19 @@ mod tests {
     #[case(Ok(()), StatusCode::NO_CONTENT)]
     #[case(Err(Error::WorkerCrashed), StatusCode::INTERNAL_SERVER_ERROR)]
     #[tokio::test]
-    async fn cleanup(#[case] result: Result<(), sqlx::error::Error>, #[case] status_code: StatusCode) {
+    async fn cleanup(#[case] result: Result<(), sqlx::Error>, #[case] status_code: StatusCode) {
         let mut repo_mock = MockHeroesRepositoryTrait::new();
         repo_mock.expect_cleanup().return_once(|| result);
 
         let repo = Arc::new(repo_mock) as DynHeroesRepository;
 
-        let app = heroes_routes(repo);//.into_service();
+        let app = heroes_routes(repo);
         let response = app
             .oneshot(
                 Request::builder()
                     .uri("/cleanup")
                     .method("POST")
-                    .body(hyper::Body::empty())
+                    .body(Body::empty())
                     .unwrap(),
             )
             .await
@@ -136,13 +132,14 @@ mod tests {
     #[tokio::test]
     async fn get_heroes() {
         let mut repo_mock = MockHeroesRepositoryTrait::new();
-        repo_mock.expect_get_by_name()
+        repo_mock
+            .expect_get_by_name()
             .with(eq("Super%"))
             .returning(|_| Ok(vec![Default::default()]));
 
         let repo = Arc::new(repo_mock) as DynHeroesRepository;
 
-        let app = heroes_routes(repo);//.into_service();
+        let app = heroes_routes(repo);
         let response = app
             .oneshot(
                 Request::builder()
@@ -156,7 +153,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
 
         assert!(matches!(body, Value::Array { .. }));

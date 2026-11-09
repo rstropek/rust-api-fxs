@@ -1,16 +1,16 @@
 use axum::{
+    Json, Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Response},
     routing::{delete, get, post},
-    Json, Router,
 };
 use serde_json::json;
 use std::sync::Arc;
-use todo_logic::{Pagination, TodoItem, TodoStore, TodoStoreError, UpdateTodoItem};
+use todo_logic::{IdentifiableTodoItem, Pagination, TodoItem, TodoStore, TodoStoreError, UpdateTodoItem};
 use tokio::{net::TcpListener, sync::RwLock};
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::EnvFilter;
 
 /// Type for our shared state
 ///
@@ -19,22 +19,18 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 type Db = Arc<RwLock<TodoStore>>;
 
 #[tokio::main]
-async fn main() {
-    // Enable tracing using Tokio's https://tokio.rs/#tk-lib-tracing
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "todo_axum=debug,tower_http=debug".into()),
+async fn main() -> std::io::Result<()> {
+    // Enable logging with tracing. Use the RUST_LOG environment variable to override the filter.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| "todo_axum=debug,tower_http=debug".into()),
         )
-        .with(tracing_subscriber::fmt::layer())
         .init();
 
     // Create shared data store
     let db = Db::default();
 
     // We register our shared state so that handlers can get it using the State extractor.
-    // Note that this will change in Axum 0.6. See more at
-    // https://docs.rs/axum/0.6.0-rc.4/axum/index.html#sharing-state-with-handlers
     let app = Router::new()
         // Here we setup the routes. Note: No macros
         .route("/", get(say_hello))
@@ -45,12 +41,12 @@ async fn main() {
         // Using tower to add tracing layer
         .layer(TraceLayer::new_for_http());
 
-    // In practice: Use graceful shutdown.
-    // Note that Axum has great examples for a log of practical scenarios,
-    // including graceful shutdown (https://github.com/tokio-rs/axum/tree/main/examples)
-    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    tracing::debug!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    // In practice: Use graceful shutdown. The hero-manager-axum sample in this repository
+    // shows how to do that. Axum also has great examples for a lot of practical scenarios
+    // (https://github.com/tokio-rs/axum/tree/main/examples).
+    let listener = TcpListener::bind("0.0.0.0:3000").await?;
+    tracing::debug!("listening on {}", listener.local_addr()?);
+    axum::serve(listener, app).await
 }
 
 /// Say hello
@@ -60,21 +56,20 @@ async fn say_hello() -> Html<&'static str> {
 
 /// Get list of todo items
 ///
-/// Note how the Query extractor is used to get query parameters. Note how the State
-/// extractor is used to get the database (changes in Axum 0.6 RC).
-/// Extractors are technically types that implement FromRequest. You can create
-/// your own extractors or use the ones provided by Axum.
-async fn get_todos(pagination: Query<Pagination>, State(db): State<Db>) -> impl IntoResponse {
+/// Note how the Query extractor is used to get query parameters and how the State
+/// extractor is used to get the database. Extractors are types that implement
+/// FromRequest or FromRequestParts. You can create your own extractors or use the
+/// ones provided by Axum.
+async fn get_todos(Query(pagination): Query<Pagination>, State(db): State<Db>) -> Json<Vec<IdentifiableTodoItem>> {
     let todos = db.read().await;
-    let Query(pagination) = pagination;
     // Json is an extractor and a response.
     Json(todos.get_todos(pagination))
 }
 
 /// Get a single todo item
 ///
-/// Note how the Path extractor is used to get query parameters.
-async fn get_todo(Path(id): Path<usize>, State(db): State<Db>) -> impl IntoResponse {
+/// Note how the Path extractor is used to get path parameters.
+async fn get_todo(Path(id): Path<usize>, State(db): State<Db>) -> Response {
     let todos = db.read().await;
     if let Some(item) = todos.get_todo(id) {
         // Note how to return Json
@@ -96,7 +91,7 @@ async fn add_todo(State(db): State<Db>, Json(todo): Json<TodoItem>) -> impl Into
 }
 
 /// Delete a todo item
-async fn delete_todo(Path(id): Path<usize>, State(db): State<Db>) -> impl IntoResponse {
+async fn delete_todo(Path(id): Path<usize>, State(db): State<Db>) -> StatusCode {
     if db.write().await.remove_todo(id).is_some() {
         StatusCode::NO_CONTENT
     } else {
@@ -109,10 +104,9 @@ async fn update_todo(
     Path(id): Path<usize>,
     State(db): State<Db>,
     Json(input): Json<UpdateTodoItem>,
-) -> Result<impl IntoResponse, StatusCode> {
+) -> Result<Json<IdentifiableTodoItem>, StatusCode> {
     let mut todos = db.write().await;
-    let res = todos.update_todo(&id, input);
-    match res {
+    match todos.update_todo(id, input) {
         Some(todo) => Ok(Json(todo.clone())),
         None => Err(StatusCode::NOT_FOUND),
     }
@@ -120,11 +114,12 @@ async fn update_todo(
 
 /// Application-level error object
 enum AppError {
-    UserRepo(TodoStoreError),
+    TodoStore(TodoStoreError),
 }
+
 impl From<TodoStoreError> for AppError {
     fn from(inner: TodoStoreError) -> Self {
-        AppError::UserRepo(inner)
+        AppError::TodoStore(inner)
     }
 }
 
@@ -135,19 +130,15 @@ impl From<TodoStoreError> for AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            AppError::UserRepo(TodoStoreError::FileAccessError(_)) => {
+            AppError::TodoStore(TodoStoreError::FileAccess(_)) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Error while writing to file")
             },
-            AppError::UserRepo(TodoStoreError::SerializationError(_)) => {
+            AppError::TodoStore(TodoStoreError::Serialization(_)) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Error during serialization")
             },
         };
 
-        let body = Json(json!({
-            "error": error_message,
-        }));
-
-        (status, body).into_response()
+        (status, Json(json!({ "error": error_message }))).into_response()
     }
 }
 

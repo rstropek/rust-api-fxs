@@ -1,11 +1,16 @@
 [package]
 name = "todo-warp"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
 
 [dependencies]
-warp = "0.3"
-tokio = { version = "1", features = ["full"] }
-todo-logic ={ path = "../todo-logic" }
-simplelog= "0"
-log = "0.4"
+todo-logic.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+warp.workspace = true

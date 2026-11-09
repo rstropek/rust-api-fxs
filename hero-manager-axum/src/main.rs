@@ -1,13 +1,17 @@
-use crate::{data::HeroesRepository, heroes::DynHeroesRepository, model::AppConfiguration};
-use axum::{error_handling::HandleErrorLayer, http, BoxError, Router};
-use clap::{crate_version, Parser};
-use model::Environment;
+use crate::{
+    data::HeroesRepository,
+    heroes::DynHeroesRepository,
+    model::{AppConfiguration, Environment},
+};
+use anyhow::Context;
+use axum::{BoxError, Router, error_handling::HandleErrorLayer, http};
+use clap::{Parser, crate_version};
 use sqlx::postgres::PgPoolOptions;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
-use tokio::signal;
+use tokio::{net::TcpListener, signal};
 use tower::ServiceBuilder;
 use tower_http::{catch_panic::CatchPanicLayer, trace::TraceLayer};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::EnvFilter;
 
 mod data;
 mod error;
@@ -25,21 +29,29 @@ struct Args {
     #[arg(short, long, default_value_t = Environment::Development, value_enum)]
     env: Environment,
 
-    #[arg(short, long, default_value = "", env = "DATABASE_URL")]
+    #[arg(short, long, env = "DATABASE_URL", hide_env_values = true)]
     database_url: String,
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     // Parse command-line args
     let cli = Args::parse();
+
+    // Configure tracing. Use the RUST_LOG environment variable to override the filter.
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "hero_manager_axum=debug,tower_http=debug,sqlx=debug".into()),
+        )
+        .init();
 
     // Setup connection pool
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&cli.database_url)
         .await
-        .expect("can connect to database");
+        .context("failed to connect to database")?;
 
     // Build app configuration object
     let app_config = Arc::new(AppConfiguration {
@@ -47,20 +59,12 @@ async fn main() {
         env: cli.env,
     });
 
-    // Configure tracing
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "hero_manager_axum=debug,tower_http=debug,sqlx=debug".into()),
-        ))
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-
     let repo = Arc::new(HeroesRepository(pool)) as DynHeroesRepository;
 
     // Setup top-level router
     let app = Router::new()
         // Add healthcheck routes
-        .merge(healthcheck::healthcheck_routes(app_config.clone()))
+        .merge(healthcheck::healthcheck_routes(app_config))
         // Add heroes routes under /heroes
         .nest("/heroes", heroes::heroes_routes(repo))
         .layer(
@@ -74,12 +78,12 @@ async fn main() {
         );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cli.port));
-    println!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    let listener = TcpListener::bind(addr).await?;
+    tracing::info!("listening on {addr}");
+    axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
-        .await
-        .unwrap();
+        .await?;
+    Ok(())
 }
 
 async fn shutdown_signal() {
@@ -103,5 +107,5 @@ async fn shutdown_signal() {
         _ = terminate => {},
     }
 
-    println!("signal received, starting graceful shutdown");
+    tracing::info!("signal received, starting graceful shutdown");
 }

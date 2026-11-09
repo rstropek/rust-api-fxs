@@ -2,13 +2,11 @@ run platform:
     cargo run --bin todo-{{platform}}
 
 build:
-    cargo build
-
-run-spin: (build-spin)
-    spin up
-
-build-spin:
-    spin build
+    cargo build --workspace
 
 check:
-    cargo clippy
+    cargo fmt --all --check
+    cargo clippy --workspace --all-targets -- -D warnings
+
+test:
+    cargo test --workspace

@@ -1,11 +1,16 @@
 [package]
 name = "todo-actix-web"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
 
 [dependencies]
-actix-web = "4"
-todo-logic ={ path = "../todo-logic" }
-tokio = { version = "1.0", features = ["full"] }
-simplelog= "0"
-log = "0.4"
+actix-web.workspace = true
+todo-logic.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true

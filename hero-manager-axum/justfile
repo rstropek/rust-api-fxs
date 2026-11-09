@@ -26,5 +26,8 @@ create-migrations:
 apply-migrations:
     sqlx migrate run
 
+run:
+    cargo run
+
 describe-table table:
     just run-psql "\d {{table}}"
